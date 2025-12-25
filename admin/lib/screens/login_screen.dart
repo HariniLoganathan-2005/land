@@ -1,3 +1,4 @@
+// lib/screens/login_screen.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -16,10 +17,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  final _emailController = TextEditingController();        // used for sign up
+  final _emailController = TextEditingController();     // used for sign up
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _loginEmailController = TextEditingController();   // used for sign in
+  final _loginEmailController = TextEditingController();    // used for sign in
 
   @override
   void dispose() {
@@ -120,174 +121,185 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF312E81), Color(0xFF4F46E5)],
-          ),
-        ),
-        child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(40),
+      backgroundColor: const Color(0xFFFFF7E8), // Updated Background
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // --- UPDATED LOGO SECTION TO MATCH USER LOGIN FORMAT ---
+                Container(
+                  width: 110,
+                  height: 110,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: const LinearGradient(
+                      colors: [
+                        Color(0xFFD4AF37), // Gold Light
+                        Color(0xFFB8962E), // Gold Dark
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
-                    child: Center(
-                      child: Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF4F46E5),
-                          borderRadius: BorderRadius.circular(24),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Colors.black26,
+                        blurRadius: 12,
+                        offset: Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4), // Border spacing
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                      ),
+                      child: ClipOval(
+                        child: Image.asset(
+                          'assets/images/shiva.png',
+                          fit: BoxFit.cover,
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Aranpani',
-                    style: TextStyle(
-                      fontSize: 36,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Aranpani',
+                  style: TextStyle(
+                    fontSize: 36,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF6D1B1B), // Temple Maroon
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Admin Panel',
+                  style: TextStyle(
+                    fontSize: 16, 
+                    color: Color(0xFF7A1E1E), // Slightly lighter maroon
+                  ),
+                ),
+                const SizedBox(height: 32),
+                Container(
+                  constraints: const BoxConstraints(maxWidth: 400),
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: const Color(0xFFD4AF37), // Gold Border
+                      width: 1.2,
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Admin Panel',
-                    style:
-                        TextStyle(fontSize: 16, color: Color(0xFFC7D2FE)),
-                  ),
-                  const SizedBox(height: 32),
-                  Container(
-                    constraints: const BoxConstraints(maxWidth: 400),
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
-                          blurRadius: 20,
-                          offset: const Offset(0, 10),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          isSignUp ? 'Admin Sign Up' : 'Admin Sign In',
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF6D1B1B),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        if (isSignUp) ...[
+                          _buildTextField(
+                            'Full Name',
+                            Icons.person,
+                            controller: _nameController,
+                          ),
+                          const SizedBox(height: 16),
+                          _buildTextField(
+                            'Email Address',
+                            Icons.email,
+                            controller: _emailController,
+                            keyboardType: TextInputType.emailAddress,
+                          ),
+                          const SizedBox(height: 16),
+                          _buildTextField(
+                            'Phone Number',
+                            Icons.phone,
+                            controller: _phoneController,
+                            keyboardType: TextInputType.phone,
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                        if (!isSignUp)
+                          _buildTextField(
+                            'Admin Email',
+                            Icons.email,
+                            controller: _loginEmailController,
+                            keyboardType: TextInputType.emailAddress,
+                          ),
+                        const SizedBox(height: 16),
+                        _buildTextField(
+                          'Password',
+                          Icons.lock,
+                          controller: _passwordController,
+                          isPassword: true,
+                        ),
+                        const SizedBox(height: 24),
+                        ElevatedButton(
+                          onPressed: _isLoading ? null : _handleAuth,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF7A1E1E), // Temple Maroon
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          child: _isLoading
+                              ? const CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                )
+                              : Text(
+                                  isSignUp ? 'Sign Up' : 'Sign In',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFFFFF4D6), // Creamy text
+                                  ),
+                                ),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              isSignUp
+                                  ? 'Already have an account? '
+                                  : "Don't have an account? ",
+                              style: const TextStyle(fontSize: 14),
+                            ),
+                            GestureDetector(
+                              onTap: () {
+                                setState(() => isSignUp = !isSignUp);
+                              },
+                              child: Text(
+                                isSignUp ? 'Sign In' : 'Sign Up',
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  color: Color(0xFF6D1B1B), // Bold maroon
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(
-                            isSignUp ? 'Admin Sign Up' : 'Admin Sign In',
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          if (isSignUp) ...[
-                            _buildTextField(
-                              'Full Name',
-                              Icons.person,
-                              controller: _nameController,
-                            ),
-                            const SizedBox(height: 16),
-                            _buildTextField(
-                              'Email Address',
-                              Icons.email,
-                              controller: _emailController,
-                              keyboardType: TextInputType.emailAddress,
-                            ),
-                            const SizedBox(height: 16),
-                            _buildTextField(
-                              'Phone Number',
-                              Icons.phone,
-                              controller: _phoneController,
-                              keyboardType: TextInputType.phone,
-                            ),
-                            const SizedBox(height: 16),
-                          ],
-                          if (!isSignUp)
-                            _buildTextField(
-                              'Admin Email',
-                              Icons.email,
-                              controller: _loginEmailController,
-                              keyboardType: TextInputType.emailAddress,
-                            ),
-                          const SizedBox(height: 16),
-                          _buildTextField(
-                            'Password',
-                            Icons.lock,
-                            controller: _passwordController,
-                            isPassword: true,
-                          ),
-                          const SizedBox(height: 24),
-                          ElevatedButton(
-                            onPressed: _isLoading ? null : _handleAuth,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF4F46E5),
-                              padding: const EdgeInsets.symmetric(
-                                  vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            child: _isLoading
-                                ? const CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  )
-                                : Text(
-                                    isSignUp ? 'Sign Up' : 'Sign In',
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                          ),
-                          const SizedBox(height: 16),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                isSignUp
-                                    ? 'Already have an account? '
-                                    : "Don't have an account? ",
-                                style: const TextStyle(fontSize: 14),
-                              ),
-                              GestureDetector(
-                                onTap: () {
-                                  setState(() => isSignUp = !isSignUp);
-                                },
-                                child: Text(
-                                  isSignUp ? 'Sign In' : 'Sign Up',
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    color: Color(0xFF4F46E5),
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
@@ -310,10 +322,10 @@ class _LoginScreenState extends State<LoginScreen> {
           value == null || value.isEmpty ? 'This field is required' : null,
       decoration: InputDecoration(
         hintText: hint,
-        prefixIcon: Icon(icon, color: const Color(0xFF6B7280)),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        prefixIcon: Icon(icon, color: const Color(0xFF6D1B1B)),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         filled: true,
-        fillColor: Colors.white,
+        fillColor: const Color(0xFFFFFBF2), // Updated Input fill
       ),
     );
   }

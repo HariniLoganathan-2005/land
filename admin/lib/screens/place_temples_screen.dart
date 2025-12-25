@@ -15,11 +15,18 @@ class PlaceTemplesScreen extends StatefulWidget {
 }
 
 class _PlaceTemplesScreenState extends State<PlaceTemplesScreen> {
-  bool isLoading = true;
+  // --- Aranpani Theme Tokens ---
+  static const Color primaryMaroon = Color(0xFF6D1B1B);
+  static const Color primaryAccentGold = Color(0xFFD4AF37);
+  static const Color secondaryGold = Color(0xFFB8962E);
+  static const Color backgroundCream = Color(0xFFFFF7E8);
+  static const Color softParchment = Color(0xFFFFFBF2);
+  static const Color darkMaroonText = Color(0xFF4A1010);
+  static const Color lightGoldText = Color(0xFFFFF4D6);
 
+  bool isLoading = true;
   String placeName = '';
   String districtName = '';
-
   List<Map<String, dynamic>> temples = [];
   int statusTab = 0;
 
@@ -46,7 +53,6 @@ class _PlaceTemplesScreenState extends State<PlaceTemplesScreen> {
 
   Future<void> _loadTemples() async {
     setState(() => isLoading = true);
-
     try {
       final snap = await FirebaseFirestore.instance
           .collection('projects')
@@ -56,8 +62,7 @@ class _PlaceTemplesScreenState extends State<PlaceTemplesScreen> {
       placeName = widget.placeId;
 
       if (snap.docs.isNotEmpty) {
-        districtName =
-            (snap.docs.first.data()['district'] ?? '').toString();
+        districtName = (snap.docs.first.data()['district'] ?? '').toString();
       }
 
       final Set<String> userIds = {};
@@ -97,44 +102,27 @@ class _PlaceTemplesScreenState extends State<PlaceTemplesScreen> {
 
         return <String, dynamic>{
           'id': doc.id,
-
           'district': data['district'] ?? '',
           'taluk': data['taluk'] ?? '',
           'place': data['place'] ?? '',
-
           'feature': data['feature'] ?? '',
           'featureType': data['featureType'] ?? '',
           'featureDimension': data['featureDimension'] ?? '',
-          'featureAmount': double.tryParse(
-                  (data['featureAmount'] ?? '0').toString()) ??
-              0.0,
-
+          'featureAmount': double.tryParse((data['featureAmount'] ?? '0').toString()) ?? 0.0,
           'name': (data['feature'] != null && data['feature'] != '')
               ? '${data['feature']} Project'
               : 'Temple Project',
-
           'status': status,
           'progress': progress,
           'isSanctioned': isSanctioned,
-
           'userName': userData['name'] ?? data['contactName'] ?? '',
           'userEmail': userData['email'] ?? '',
           'userPhone': userData['phoneNumber'] ?? data['contactPhone'] ?? '',
-
-          'estimatedAmount': double.tryParse(
-                  (data['estimatedAmount'] ?? '0').toString()) ??
-              0.0,
-
+          'estimatedAmount': double.tryParse((data['estimatedAmount'] ?? '0').toString()) ?? 0.0,
           'imageUrls': List<String>.from(data['imageUrls'] ?? []),
-
-          'submittedDate':
-              (data['dateCreated'] != null && data['dateCreated'] is Timestamp)
-                  ? (data['dateCreated'] as Timestamp)
-                      .toDate()
-                      .toIso8601String()
-                      .substring(0, 10)
-                  : '',
-
+          'submittedDate': (data['dateCreated'] != null && data['dateCreated'] is Timestamp)
+              ? (data['dateCreated'] as Timestamp).toDate().toIso8601String().substring(0, 10)
+              : '',
           'raw': data,
         };
       }).toList();
@@ -149,12 +137,14 @@ class _PlaceTemplesScreenState extends State<PlaceTemplesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: backgroundCream,
       body: Column(
         children: [
+          // Header with Temple Maroon Gradient
           Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
-                colors: [Color(0xFF4F46E5), Color(0xFF6366F1)],
+                colors: [primaryMaroon, Color(0xFF4A1010)],
               ),
             ),
             child: SafeArea(
@@ -164,26 +154,23 @@ class _PlaceTemplesScreenState extends State<PlaceTemplesScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.arrow_back, color: Colors.white),
+                      icon: const Icon(Icons.arrow_back, color: lightGoldText),
                       onPressed: () => Navigator.pop(context),
                     ),
                     Text(
                       placeName,
                       style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
+                        color: lightGoldText,
+                        fontSize: 22,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      districtName.isEmpty
-                          ? 'Temple Projects'
-                          : '$districtName District',
-                      style: const TextStyle(
-                          color: Color(0xFFC7D2FE), fontSize: 14),
+                      districtName.isEmpty ? 'Temple Projects' : '$districtName District',
+                      style: const TextStyle(color: primaryAccentGold, fontSize: 14),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
                     Row(
                       children: [
                         _buildStatusTab('Pending (${pending.length})', 0),
@@ -198,13 +185,12 @@ class _PlaceTemplesScreenState extends State<PlaceTemplesScreen> {
           ),
           Expanded(
             child: isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(child: CircularProgressIndicator(color: primaryMaroon))
                 : currentList.isEmpty
                     ? const Center(
                         child: Text(
                           'No projects found',
-                          style:
-                              TextStyle(fontSize: 16, color: Colors.grey),
+                          style: TextStyle(fontSize: 16, color: darkMaroonText),
                         ),
                       )
                     : ListView.builder(
@@ -228,21 +214,21 @@ class _PlaceTemplesScreenState extends State<PlaceTemplesScreen> {
         onTap: () => setState(() => statusTab = index),
         child: Container(
           margin: const EdgeInsets.only(right: 8),
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            color: isActive ? Colors.white : Colors.transparent,
+            color: isActive ? primaryAccentGold : Colors.transparent,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: isActive ? Colors.white : Colors.white24,
+              color: isActive ? primaryAccentGold : lightGoldText.withOpacity(0.3),
             ),
           ),
           child: Text(
             label,
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: isActive ? const Color(0xFF4F46E5) : Colors.white,
-              fontWeight: FontWeight.w600,
-              fontSize: 12,
+              color: isActive ? primaryMaroon : lightGoldText,
+              fontWeight: FontWeight.bold,
+              fontSize: 11,
             ),
           ),
         ),
@@ -252,10 +238,24 @@ class _PlaceTemplesScreenState extends State<PlaceTemplesScreen> {
 
   Widget _buildTempleCard(Map<String, dynamic> temple) {
     return Card(
+      elevation: 0,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: primaryAccentGold, width: 0.5),
+      ),
+      margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
-        title: Text(temple['name']),
-        subtitle: Text(temple['userName']),
-        trailing: const Icon(Icons.chevron_right),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        title: Text(
+          temple['name'],
+          style: const TextStyle(fontWeight: FontWeight.bold, color: darkMaroonText),
+        ),
+        subtitle: Text(
+          temple['userName'],
+          style: TextStyle(color: darkMaroonText.withOpacity(0.7)),
+        ),
+        trailing: const Icon(Icons.chevron_right, color: primaryMaroon),
         onTap: () async {
           final updated = await Navigator.push<Map<String, dynamic>?>(
             context,
@@ -272,8 +272,7 @@ class _PlaceTemplesScreenState extends State<PlaceTemplesScreen> {
               temples.removeWhere((t) => t['id'] == temple['id']);
             });
           } else {
-            final idx =
-                temples.indexWhere((t) => t['id'] == updated['id']);
+            final idx = temples.indexWhere((t) => t['id'] == updated['id']);
             if (idx != -1) {
               setState(() {
                 temples[idx] = updated;

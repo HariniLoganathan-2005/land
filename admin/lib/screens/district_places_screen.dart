@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'place_temples_screen.dart';
 
 class DistrictPlacesScreen extends StatefulWidget {
-  final String districtId; // district name stored in projects.district
+  final String districtId;
 
   const DistrictPlacesScreen({
     Key? key,
@@ -15,6 +15,15 @@ class DistrictPlacesScreen extends StatefulWidget {
 }
 
 class _DistrictPlacesScreenState extends State<DistrictPlacesScreen> {
+  // --- Locked Aranpani Theme ---
+  static const Color primaryMaroon = Color(0xFF6D1B1B);
+  static const Color primaryAccentGold = Color(0xFFD4AF37);
+  static const Color secondaryGold = Color(0xFFB8962E);
+  static const Color backgroundCream = Color(0xFFFFF7E8);
+  static const Color softParchment = Color(0xFFFFFBF2);
+  static const Color darkMaroonText = Color(0xFF4A1010);
+  static const Color lightGoldText = Color(0xFFFFF4D6);
+
   String searchQuery = '';
   String districtName = '';
   List<Map<String, dynamic>> places = [];
@@ -27,8 +36,9 @@ class _DistrictPlacesScreenState extends State<DistrictPlacesScreen> {
   }
 
   Future<void> _loadPlaces() async {
+    if (!mounted) return;
     setState(() => isLoading = true);
-
+    
     try {
       final snapshot = await FirebaseFirestore.instance
           .collection('projects')
@@ -36,18 +46,14 @@ class _DistrictPlacesScreenState extends State<DistrictPlacesScreen> {
           .get();
 
       districtName = widget.districtId;
-
       final Map<String, Map<String, dynamic>> talukMap = {};
 
       for (final doc in snapshot.docs) {
         final data = doc.data();
-
-        final String taluk =
-            (data['taluk'] ?? '').toString().trim();
+        final String taluk = (data['taluk'] ?? '').toString().trim();
         if (taluk.isEmpty) continue;
 
-        final String status =
-            (data['status'] ?? 'pending').toString();
+        final bool isSanctioned = data['isSanctioned'] == true;
 
         talukMap.putIfAbsent(taluk, () {
           return {
@@ -58,28 +64,22 @@ class _DistrictPlacesScreenState extends State<DistrictPlacesScreen> {
           };
         });
 
-        // total projects in this taluk
-        talukMap[taluk]!['temples'] =
-            (talukMap[taluk]!['temples'] as int) + 1;
-
-        // pending = new request
-        if (status == 'pending') {
-          talukMap[taluk]!['newRequests'] =
-              (talukMap[taluk]!['newRequests'] as int) + 1;
+        talukMap[taluk]!['temples'] = (talukMap[taluk]!['temples'] as int) + 1;
+        if (!isSanctioned) {
+          talukMap[taluk]!['newRequests'] = (talukMap[taluk]!['newRequests'] as int) + 1;
         }
       }
 
-      places = talukMap.values.toList()
-        ..sort((a, b) =>
-            a['name'].toString().compareTo(b['name'].toString()));
+      if (mounted) {
+        setState(() {
+          places = talukMap.values.toList()
+            ..sort((a, b) => a['name'].toString().compareTo(b['name'].toString()));
+        });
+      }
     } catch (e) {
       debugPrint('Error loading district places: $e');
-      places = [];
-      districtName = widget.districtId;
     } finally {
-      if (mounted) {
-        setState(() => isLoading = false);
-      }
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
@@ -93,128 +93,150 @@ class _DistrictPlacesScreenState extends State<DistrictPlacesScreen> {
     }).toList();
 
     return Scaffold(
+      backgroundColor: backgroundCream,
       body: Column(
         children: [
+          // HEADER SECTION
           Container(
+            width: double.infinity,
+            padding: const EdgeInsets.only(bottom: 20),
             decoration: const BoxDecoration(
               gradient: LinearGradient(
-                colors: [Color(0xFF4F46E5), Color(0xFF6366F1)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [primaryMaroon, Color(0xFF4A1010)],
               ),
             ),
             child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back,
-                          color: Colors.white),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                    Text(
-                      '$districtName District',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
+              bottom: false,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back, color: lightGoldText),
+                        onPressed: () => Navigator.pop(context),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${places.length} Taluks',
-                      style: const TextStyle(
-                        color: Color(0xFFC7D2FE),
-                        fontSize: 14,
+                      const Text(
+                        'District Details',
+                        style: TextStyle(color: primaryAccentGold, fontSize: 14),
                       ),
+                    ],
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '$districtName District',
+                          style: const TextStyle(
+                            color: lightGoldText,
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${places.length} Taluks Registered',
+                          style: const TextStyle(color: primaryAccentGold, fontSize: 12),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
 
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              onChanged: (v) => setState(() => searchQuery = v),
-              decoration: InputDecoration(
-                hintText: 'Search taluks...',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                filled: true,
-                fillColor: Colors.white,
-              ),
-            ),
-          ),
+          // SEARCH SECTION
+          _buildSearchField(),
 
+          // LIST SECTION
           Expanded(
             child: isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(child: CircularProgressIndicator(color: primaryMaroon))
                 : filtered.isEmpty
-                    ? const Center(child: Text('No taluks available'))
+                    ? const Center(child: Text('No taluks found', style: TextStyle(color: darkMaroonText)))
                     : ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                         itemCount: filtered.length,
-                        itemBuilder: (context, index) {
-                          final place = filtered[index];
-
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            child: ListTile(
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => PlaceTemplesScreen(
-                                      placeId: place['id'],
-                                    ),
-                                  ),
-                                );
-                              },
-                              title: Text(
-                                place['name'],
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              subtitle: Text(
-                                '${place['temples']} Temple${place['temples'] == 1 ? '' : 's'}',
-                              ),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if ((place['newRequests'] as int) > 0)
-                                    Container(
-                                      padding:
-                                          const EdgeInsets.symmetric(
-                                              horizontal: 8, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: Colors.red,
-                                        borderRadius:
-                                            BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        '${place['newRequests']} New',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                  const SizedBox(width: 8),
-                                  const Icon(Icons.chevron_right),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
+                        itemBuilder: (context, index) => _buildTalukCard(filtered[index]),
                       ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSearchField() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: TextField(
+        onChanged: (v) => setState(() => searchQuery = v),
+        decoration: InputDecoration(
+          hintText: 'Search taluks...',
+          hintStyle: TextStyle(color: darkMaroonText.withOpacity(0.5)),
+          prefixIcon: const Icon(Icons.search, color: primaryMaroon),
+          filled: true,
+          fillColor: Colors.white,
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: const BorderSide(color: secondaryGold),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: const BorderSide(color: primaryAccentGold, width: 2),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTalukCard(Map<String, dynamic> place) {
+    return Card(
+      elevation: 0,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: secondaryGold, width: 0.5),
+      ),
+      margin: const EdgeInsets.only(bottom: 12),
+      child: ListTile(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => PlaceTemplesScreen(
+                placeId: place['id'], // Ensure your PlaceTemplesScreen accepts 'placeId'
+              ),
+            ),
+          );
+        },
+        title: Text(
+          place['name'],
+          style: const TextStyle(fontWeight: FontWeight.bold, color: darkMaroonText),
+        ),
+        subtitle: Text('${place['temples']} Projects'),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if ((place['newRequests'] as int) > 0)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: primaryMaroon,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${place['newRequests']} NEW',
+                  style: const TextStyle(color: lightGoldText, fontSize: 10, fontWeight: FontWeight.bold),
+                ),
+              ),
+            const Icon(Icons.chevron_right, color: primaryAccentGold),
+          ],
+        ),
       ),
     );
   }

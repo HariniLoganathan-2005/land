@@ -20,6 +20,11 @@ class TempleDetailScreen extends StatefulWidget {
 }
 
 class _TempleDetailScreenState extends State<TempleDetailScreen> {
+  // --- Aranpani Theme Tokens ---
+  static const Color primaryMaroon = Color(0xFF6D1B1B);
+  static const Color backgroundCream = Color(0xFFFFF7E8);
+  static const Color primaryGold = Color(0xFFD4AF37);
+
   Map<String, dynamic>? temple;
   bool isLoading = true;
 
@@ -30,6 +35,7 @@ class _TempleDetailScreenState extends State<TempleDetailScreen> {
   }
 
   Future<void> _loadTemple() async {
+    if (!mounted) return;
     setState(() => isLoading = true);
 
     temple = Map<String, dynamic>.from(widget.initialTempleData);
@@ -40,7 +46,7 @@ class _TempleDetailScreenState extends State<TempleDetailScreen> {
           .doc(widget.templeId)
           .get();
 
-      if (doc.exists) {
+      if (doc.exists && doc.data() != null) {
         final data = doc.data()!;
         temple!.addAll(data);
         temple!['id'] = widget.templeId;
@@ -57,6 +63,7 @@ class _TempleDetailScreenState extends State<TempleDetailScreen> {
   }
 
   void _normalizeTempleFields() {
+    if (temple == null) return;
     final t = temple!;
 
     final bool isSanctioned = t['isSanctioned'] == true;
@@ -70,43 +77,65 @@ class _TempleDetailScreenState extends State<TempleDetailScreen> {
       t['status'] = 'ongoing';
     }
 
-    t['projectNumber'] = (t['projectNumber'] ?? t['projectId'] ?? 'P000')
-        .toString();
+    t['projectNumber'] = (t['projectNumber'] ?? t['projectId'] ?? 'P000').toString();
 
-    t['name'] =
-        (t['name'] ??
-                (t['feature'] != null && t['feature'] != ''
-                    ? '${t['feature']} Project'
-                    : 'Temple Project'))
-            .toString();
+    t['name'] = (t['name'] ??
+            (t['feature'] != null && t['feature'] != ''
+                ? '${t['feature']} Project'
+                : 'Temple Project'))
+        .toString();
   }
 
   @override
   Widget build(BuildContext context) {
+    // FIXED: Consistent Alignment during loading to prevent "jumpy" transitions
     if (isLoading || temple == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Scaffold(
+        backgroundColor: backgroundCream,
+        // Match the header height and alignment of sub-screens
+        appBar: AppBar(
+          backgroundColor: primaryMaroon,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: const Text(
+            'Loading Details...',
+            style: TextStyle(color: Color(0xFFFFF4D6), fontSize: 18),
+          ),
+        ),
+        body: const Center(
+          child: CircularProgressIndicator(
+            color: primaryMaroon,
+          ),
+        ),
+      );
     }
 
     final String status = (temple!['status'] ?? 'pending').toString();
 
-    if (status == 'pending') {
-      return PendingTempleDetailScreen(
-        temple: temple!,
-        onUpdated: (updated) => Navigator.pop(context, updated),
-        onDeleted: () => Navigator.pop(context, null),
-      );
+    // These screens should now handle their own Scaffolds but start 
+    // from the same vertical alignment defined here.
+    switch (status) {
+      case 'pending':
+        return PendingTempleDetailScreen(
+          temple: temple!,
+          onUpdated: (updated) => Navigator.pop(context, updated),
+          onDeleted: () => Navigator.pop(context, null),
+        );
+      case 'ongoing':
+        return OngoingTempleDetailScreen(
+          temple: temple!,
+          onUpdated: (updated) => Navigator.pop(context, updated),
+        );
+      case 'completed':
+        return CompletedTempleDetailScreen(
+          temple: temple!,
+          onUpdated: (updated) => Navigator.pop(context, updated),
+        );
+      default:
+        return const Scaffold(body: Center(child: Text('Unknown Status')));
     }
-
-    if (status == 'ongoing') {
-      return OngoingTempleDetailScreen(
-        temple: temple!,
-        onUpdated: (updated) => Navigator.pop(context, updated),
-      );
-    }
-
-    return CompletedTempleDetailScreen(
-      temple: temple!,
-      onUpdated: (updated) => Navigator.pop(context, updated),
-    );
   }
 }
