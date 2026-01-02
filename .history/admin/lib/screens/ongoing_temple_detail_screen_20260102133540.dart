@@ -38,52 +38,6 @@ class _OngoingTempleDetailScreenState extends State<OngoingTempleDetailScreen> {
     Navigator.pop(context);
   }
 
-  // --- NEW: FULL SCREEN IMAGE VIEWER ---
-  void _showFullScreenImage(String imageUrl) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.all(10),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // Allows users to pinch and zoom into the bill
-            InteractiveViewer(
-              panEnabled: true,
-              minScale: 0.5,
-              maxScale: 4.0,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.network(
-                  imageUrl,
-                  fit: BoxFit.contain,
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) return child;
-                    return const Center(
-                      child: CircularProgressIndicator(color: Colors.white),
-                    );
-                  },
-                ),
-              ),
-            ),
-            Positioned(
-              top: 10,
-              right: 10,
-              child: CircleAvatar(
-                backgroundColor: Colors.black54,
-                child: IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -97,8 +51,7 @@ class _OngoingTempleDetailScreenState extends State<OngoingTempleDetailScreen> {
         ),
         title: Text(
           (temple['name'] ?? 'Temple Project').toString(),
-          style: const TextStyle(
-              color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
         ),
       ),
       body: Column(
@@ -139,10 +92,7 @@ class _OngoingTempleDetailScreenState extends State<OngoingTempleDetailScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 16),
           decoration: BoxDecoration(
-            border: Border(
-                bottom: BorderSide(
-                    color: isActive ? primaryGold : Colors.transparent,
-                    width: 3)),
+            border: Border(bottom: BorderSide(color: isActive ? primaryGold : Colors.transparent, width: 3)),
           ),
           child: Text(
             label,
@@ -163,19 +113,11 @@ class _OngoingTempleDetailScreenState extends State<OngoingTempleDetailScreen> {
     return ListView(
       padding: const EdgeInsets.all(20.0),
       children: [
-        const Text('Budget Utilization',
-            style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: darkMaroonText)),
+        const Text('Budget Utilization', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: darkMaroonText)),
         const SizedBox(height: 20),
         _buildBudgetCard(),
         const SizedBox(height: 24),
-        const Text('Bills Uploaded from Site',
-            style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: darkMaroonText)),
+        const Text('Bills Uploaded from Site', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: darkMaroonText)),
         const SizedBox(height: 12),
 
         // --- REAL-TIME STREAM OF BILLS ---
@@ -183,18 +125,18 @@ class _OngoingTempleDetailScreenState extends State<OngoingTempleDetailScreen> {
           stream: FirebaseFirestore.instance
               .collection('bills')
               .where('projectId', isEqualTo: temple['id'])
+              // REMOVED .orderBy TO FIX INDEX ERROR TEMPORARILY
               .snapshots(),
           builder: (context, snapshot) {
+            // Debugging Info
             debugPrint("Admin searching for Project ID: ${temple['id']}");
 
             if (snapshot.hasError) {
-              return Text("Error loading bills: ${snapshot.error}",
-                  style: const TextStyle(color: Colors.red));
+              return Text("Error loading bills: ${snapshot.error}", style: const TextStyle(color: Colors.red));
             }
 
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(
-                  child: CircularProgressIndicator(color: primaryMaroon));
+              return const Center(child: CircularProgressIndicator(color: primaryMaroon));
             }
 
             if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
@@ -217,62 +159,26 @@ class _OngoingTempleDetailScreenState extends State<OngoingTempleDetailScreen> {
     final List<dynamic> images = bill['imageUrls'] ?? [];
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: Colors.grey.shade300)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade300)),
       child: ExpansionTile(
-        title: Text(bill['title'] ?? 'New Bill',
-            style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text('Amount: ₹${bill['amount']}',
-            style: const TextStyle(
-                color: Colors.green, fontWeight: FontWeight.bold)),
+        title: Text(bill['title'] ?? 'New Bill', style: const TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: Text('Amount: ₹${bill['amount']}', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
         children: [
           if (images.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.all(12.0),
+              padding: const EdgeInsets.all(8.0),
               child: SizedBox(
                 height: 100,
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal,
                   itemCount: images.length,
-                  itemBuilder: (ctx, i) {
-                    final imageUrl = images[i].toString();
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 12),
-                      child: GestureDetector(
-                        onTap: () => _showFullScreenImage(imageUrl),
-                        child: Stack(
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: Image.network(
-                                imageUrl,
-                                width: 100,
-                                height: 100,
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                            Positioned(
-                              bottom: 4,
-                              right: 4,
-                              child: Container(
-                                padding: const EdgeInsets.all(2),
-                                decoration: BoxDecoration(
-                                  color: Colors.black54,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: const Icon(
-                                  Icons.fullscreen,
-                                  color: Colors.white,
-                                  size: 16,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
+                  itemBuilder: (ctx, i) => Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(images[i], width: 100, height: 100, fit: BoxFit.cover),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -284,27 +190,18 @@ class _OngoingTempleDetailScreenState extends State<OngoingTempleDetailScreen> {
   Widget _buildBudgetCard() {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade300)),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade300)),
       child: Column(
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: const [
               Text('Total Budget', style: TextStyle(color: Colors.grey)),
-              Text('₹5,00,000',
-                  style: TextStyle(
-                      fontWeight: FontWeight.bold, color: primaryMaroon)),
+              Text('₹5,00,000', style: TextStyle(fontWeight: FontWeight.bold, color: primaryMaroon)),
             ],
           ),
           const SizedBox(height: 12),
-          const LinearProgressIndicator(
-              value: 0.6,
-              backgroundColor: backgroundCream,
-              color: primaryGold,
-              minHeight: 8),
+          const LinearProgressIndicator(value: 0.6, backgroundColor: backgroundCream, color: primaryGold, minHeight: 8),
         ],
       ),
     );
@@ -313,10 +210,8 @@ class _OngoingTempleDetailScreenState extends State<OngoingTempleDetailScreen> {
   Widget _buildEmptyState(String msg) {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-          color: Colors.white, borderRadius: BorderRadius.circular(12)),
-      child:
-          Center(child: Text(msg, style: const TextStyle(color: Colors.grey))),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+      child: Center(child: Text(msg, style: const TextStyle(color: Colors.grey))),
     );
   }
 }

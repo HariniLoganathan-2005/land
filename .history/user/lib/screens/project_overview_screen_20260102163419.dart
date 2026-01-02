@@ -62,50 +62,6 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
     super.dispose();
   }
 
-  // --- NEW: FULL SCREEN IMAGE VIEWER ---
-  void _showFullScreenImage(String imageUrl) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.all(10),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // InteractiveViewer allows users to pinch and zoom
-            InteractiveViewer(
-              panEnabled: true,
-              minScale: 0.5,
-              maxScale: 4.0,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.network(
-                  imageUrl,
-                  fit: BoxFit.contain,
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) return child;
-                    return const Center(child: CircularProgressIndicator(color: Colors.white));
-                  },
-                ),
-              ),
-            ),
-            Positioned(
-              top: 10,
-              right: 10,
-              child: CircleAvatar(
-                backgroundColor: Colors.black54,
-                child: IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   // --- DELETE LOGIC ---
   Future<void> _deleteBill(String docId) async {
     try {
@@ -118,7 +74,7 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
     }
   }
 
-  // AI Extraction Logic
+  // AI Extraction Logic - Uses Gemini 1.5 Flash
   Future<Map<String, dynamic>?> _extractBillData(File imageFile) async {
     try {
       final model =
@@ -442,32 +398,10 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
                           Padding(
                             padding: const EdgeInsets.all(12.0),
                             child: Wrap(
-                              spacing: 12,
-                              runSpacing: 12,
-                              children: (bill['imageUrls'] as List).map<Widget>((url) => GestureDetector(
-                                onTap: () => _showFullScreenImage(url as String), // Tap to view full image
-                                child: MouseRegion(
-                                  cursor: SystemMouseCursors.click,
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(10),
-                                    child: Stack(
-                                      children: [
-                                        Image.network(url, width: 90, height: 90, fit: BoxFit.cover),
-                                        Positioned(
-                                          bottom: 0,
-                                          right: 0,
-                                          child: Container(
-                                            decoration: const BoxDecoration(
-                                              color: Colors.black54,
-                                              borderRadius: BorderRadius.only(topLeft: Radius.circular(8))
-                                            ),
-                                            child: const Icon(Icons.fullscreen, color: Colors.white, size: 20),
-                                          ),
-                                        )
-                                      ],
-                                    ),
-                                  ),
-                                ),
+                              spacing: 8,
+                              children: (bill['imageUrls'] as List).map<Widget>((url) => ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: Image.network(url, width: 90, height: 90, fit: BoxFit.cover),
                               )).toList(),
                             ),
                           ),

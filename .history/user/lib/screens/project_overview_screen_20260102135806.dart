@@ -26,7 +26,7 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
 
   final ImagePicker _picker = ImagePicker();
 
-  // Gemini API Key
+  // TODO: PASTE YOUR API KEY HERE
   final String _geminiApiKey = "AIzaSyC7rjITsgx4nG4-a3tA9dDkWUW2uP7HRI4";
 
   // Activities form controllers
@@ -60,62 +60,6 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
     _donationController.dispose();
     _billingController.dispose();
     super.dispose();
-  }
-
-  // --- NEW: FULL SCREEN IMAGE VIEWER ---
-  void _showFullScreenImage(String imageUrl) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.all(10),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // InteractiveViewer allows users to pinch and zoom
-            InteractiveViewer(
-              panEnabled: true,
-              minScale: 0.5,
-              maxScale: 4.0,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.network(
-                  imageUrl,
-                  fit: BoxFit.contain,
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) return child;
-                    return const Center(child: CircularProgressIndicator(color: Colors.white));
-                  },
-                ),
-              ),
-            ),
-            Positioned(
-              top: 10,
-              right: 10,
-              child: CircleAvatar(
-                backgroundColor: Colors.black54,
-                child: IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // --- DELETE LOGIC ---
-  Future<void> _deleteBill(String docId) async {
-    try {
-      await _billsRef.doc(docId).delete();
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Bill deleted successfully')));
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Delete failed: $e')));
-    }
   }
 
   // AI Extraction Logic
@@ -191,6 +135,33 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
     }
   }
 
+  // NEW: Delete Functionality
+  Future<void> _deleteBill(String docId) async {
+    bool? confirm = await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text("Delete Bill", style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: const Color(0xFF6A1F1A))),
+        content: const Text("Are you sure you want to delete this bill? It will be removed for the Admin as well."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true), 
+            child: const Text("Delete", style: TextStyle(color: Colors.red))
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await _billsRef.doc(docId).delete();
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bill deleted successfully')));
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
+      }
+    }
+  }
+
   Future<void> _showUploadBillDialog() async {
     final TextEditingController titleCtrl = TextEditingController();
     final TextEditingController amountCtrl = TextEditingController();
@@ -263,6 +234,7 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
                     const SizedBox(height: 12),
                     const Divider(color: Color(0xFFB6862C), thickness: 0.5),
                     const SizedBox(height: 12),
+
                     TextField(
                       controller: titleCtrl,
                       decoration: InputDecoration(
@@ -370,7 +342,7 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
     );
   }
 
-  // --- BILLS TAB BUILDER ---
+  // UPDATED: Bills Tab with StreamBuilder and Delete Button
   Widget _billsTab() {
     return Column(
       children: [
@@ -383,7 +355,8 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
             child: ElevatedButton.icon(
               icon: const Icon(Icons.upload, color: Colors.white),
               label: Text("Upload Bill",
-                  style: GoogleFonts.poppins(fontSize: 16, color: Colors.white)),
+                  style:
+                      GoogleFonts.poppins(fontSize: 16, color: Colors.white)),
               onPressed: _showUploadBillDialog,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF8E3D2C),
@@ -401,77 +374,90 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
                 .orderBy('createdAt', descending: true)
                 .snapshots(),
             builder: (context, snapshot) {
-              if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}"));
-              if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+              if (snapshot.hasError) {
+                return Center(child: Text('Error: ${snapshot.error}'));
+              }
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator(color: Color(0xFF8E3D2C)));
+              }
 
               final docs = snapshot.data?.docs ?? [];
+
               if (docs.isEmpty) {
-                return Center(child: Text('No bills yet', style: GoogleFonts.poppins(color: Colors.grey)));
+                return Center(
+                    child: Text('No bills yet',
+                        style: GoogleFonts.poppins(color: Colors.grey)));
               }
 
               return ListView.builder(
                 padding: const EdgeInsets.all(16),
                 itemCount: docs.length,
                 itemBuilder: (context, i) {
-                  final bill = docs[i].data();
-                  final String billId = docs[i].id;
-                  
-                  DateTime date = DateTime.now();
-                  if (bill['createdAt'] != null && bill['createdAt'] is Timestamp) {
-                    date = (bill['createdAt'] as Timestamp).toDate();
-                  }
+                  final billDoc = docs[i];
+                  final bill = billDoc.data();
+                  final DateTime? date = (bill['createdAt'] as Timestamp?)?.toDate();
 
                   return Card(
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
-                        side: const BorderSide(color: Color(0xFFB6862C), width: 1)),
+                        side: const BorderSide(
+                            color: Color(0xFFB6862C), width: 1)),
                     margin: const EdgeInsets.symmetric(vertical: 10),
-                    child: ExpansionTile(
-                      title: Text(bill['title'] ?? 'Bill',
-                          style: GoogleFonts.poppins(
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFF6A1F1A))),
-                      subtitle: Text("₹${bill['amount']} • ${date.day}/${date.month}/${date.year}",
-                          style: GoogleFonts.poppins(color: Colors.brown)),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete_outline, color: Colors.red),
-                        onPressed: () => _deleteBill(billId),
-                      ),
-                      children: [
-                        if (bill['imageUrls'] != null)
-                          Padding(
-                            padding: const EdgeInsets.all(12.0),
-                            child: Wrap(
-                              spacing: 12,
-                              runSpacing: 12,
-                              children: (bill['imageUrls'] as List).map<Widget>((url) => GestureDetector(
-                                onTap: () => _showFullScreenImage(url as String), // Tap to view full image
-                                child: MouseRegion(
-                                  cursor: SystemMouseCursors.click,
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(10),
-                                    child: Stack(
-                                      children: [
-                                        Image.network(url, width: 90, height: 90, fit: BoxFit.cover),
-                                        Positioned(
-                                          bottom: 0,
-                                          right: 0,
-                                          child: Container(
-                                            decoration: const BoxDecoration(
-                                              color: Colors.black54,
-                                              borderRadius: BorderRadius.only(topLeft: Radius.circular(8))
-                                            ),
-                                            child: const Icon(Icons.fullscreen, color: Colors.white, size: 20),
-                                          ),
-                                        )
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              )).toList(),
-                            ),
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.all(14),
+                      title: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(bill['title'] ?? '',
+                                style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.w600,
+                                    color: const Color(0xFF6A1F1A))),
                           ),
-                      ],
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                            onPressed: () => _deleteBill(billDoc.id),
+                          )
+                        ],
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text("₹${bill['amount']}",
+                              style:
+                                  GoogleFonts.poppins(color: Colors.brown)),
+                          const SizedBox(height: 4),
+                          if (date != null)
+                            Text(
+                                "Date: ${date.day}/${date.month}/${date.year}",
+                                style:
+                                    GoogleFonts.poppins(color: Colors.brown)),
+                          const SizedBox(height: 8),
+                          if (bill['imageUrls'] != null &&
+                              (bill['imageUrls'] as List).isNotEmpty)
+                            SizedBox(
+                              height: 80,
+                              child: ListView(
+                                scrollDirection: Axis.horizontal,
+                                children: (bill['imageUrls'] as List)
+                                    .map<Widget>((url) => Padding(
+                                          padding:
+                                              const EdgeInsets.only(right: 8),
+                                          child: ClipRRect(
+                                            borderRadius:
+                                                BorderRadius.circular(10),
+                                            child: Image.network(
+                                                url as String,
+                                                width: 80,
+                                                height: 80,
+                                                fit: BoxFit.cover),
+                                          ),
+                                        ))
+                                    .toList(),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   );
                 },

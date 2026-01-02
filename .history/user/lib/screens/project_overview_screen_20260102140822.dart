@@ -26,10 +26,8 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
 
   final ImagePicker _picker = ImagePicker();
 
-  // Gemini API Key
   final String _geminiApiKey = "AIzaSyC7rjITsgx4nG4-a3tA9dDkWUW2uP7HRI4";
 
-  // Activities form controllers
   final TextEditingController _godNameController = TextEditingController();
   final TextEditingController _peopleController = TextEditingController();
   final TextEditingController _donationController = TextEditingController();
@@ -62,63 +60,33 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
     super.dispose();
   }
 
-  // --- NEW: FULL SCREEN IMAGE VIEWER ---
-  void _showFullScreenImage(String imageUrl) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.all(10),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // InteractiveViewer allows users to pinch and zoom
-            InteractiveViewer(
-              panEnabled: true,
-              minScale: 0.5,
-              maxScale: 4.0,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.network(
-                  imageUrl,
-                  fit: BoxFit.contain,
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) return child;
-                    return const Center(child: CircularProgressIndicator(color: Colors.white));
-                  },
-                ),
-              ),
-            ),
-            Positioned(
-              top: 10,
-              right: 10,
-              child: CircleAvatar(
-                backgroundColor: Colors.black54,
-                child: IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  // Check if bill was uploaded within the last hour
+  bool _canDelete(dynamic createdAt) {
+    if (createdAt == null) return false;
+    DateTime date;
+    if (createdAt is Timestamp) {
+      date = createdAt.toDate();
+    } else if (createdAt is DateTime) {
+      date = createdAt;
+    } else {
+      return false;
+    }
+    return DateTime.now().difference(date).inHours < 1;
   }
 
-  // --- DELETE LOGIC ---
-  Future<void> _deleteBill(String docId) async {
+  Future<void> _deleteBill(String billId) async {
     try {
-      await _billsRef.doc(docId).delete();
+      await _billsRef.doc(billId).delete();
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Bill deleted successfully')));
+        const SnackBar(content: Text('Bill deleted successfully')),
+      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Delete failed: $e')));
+        SnackBar(content: Text('Error deleting bill: $e')),
+      );
     }
   }
 
-  // AI Extraction Logic
   Future<Map<String, dynamic>?> _extractBillData(File imageFile) async {
     try {
       final model =
@@ -370,7 +338,6 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
     );
   }
 
-  // --- BILLS TAB BUILDER ---
   Widget _billsTab() {
     return Column(
       children: [
@@ -383,7 +350,8 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
             child: ElevatedButton.icon(
               icon: const Icon(Icons.upload, color: Colors.white),
               label: Text("Upload Bill",
-                  style: GoogleFonts.poppins(fontSize: 16, color: Colors.white)),
+                  style:
+                      GoogleFonts.poppins(fontSize: 16, color: Colors.white)),
               onPressed: _showUploadBillDialog,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF8E3D2C),
@@ -401,77 +369,84 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
                 .orderBy('createdAt', descending: true)
                 .snapshots(),
             builder: (context, snapshot) {
-              if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}"));
-              if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
               final docs = snapshot.data?.docs ?? [];
               if (docs.isEmpty) {
-                return Center(child: Text('No bills yet', style: GoogleFonts.poppins(color: Colors.grey)));
+                return Center(
+                    child: Text('No bills yet',
+                        style: GoogleFonts.poppins(color: Colors.grey)));
               }
-
               return ListView.builder(
                 padding: const EdgeInsets.all(16),
                 itemCount: docs.length,
                 itemBuilder: (context, i) {
-                  final bill = docs[i].data();
-                  final String billId = docs[i].id;
-                  
-                  DateTime date = DateTime.now();
-                  if (bill['createdAt'] != null && bill['createdAt'] is Timestamp) {
-                    date = (bill['createdAt'] as Timestamp).toDate();
-                  }
+                  final billData = docs[i].data();
+                  final billId = docs[i].id;
+                  final createdAt = billData['createdAt'];
 
                   return Card(
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
-                        side: const BorderSide(color: Color(0xFFB6862C), width: 1)),
+                        side: const BorderSide(
+                            color: Color(0xFFB6862C), width: 1)),
                     margin: const EdgeInsets.symmetric(vertical: 10),
-                    child: ExpansionTile(
-                      title: Text(bill['title'] ?? 'Bill',
-                          style: GoogleFonts.poppins(
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFF6A1F1A))),
-                      subtitle: Text("₹${bill['amount']} • ${date.day}/${date.month}/${date.year}",
-                          style: GoogleFonts.poppins(color: Colors.brown)),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete_outline, color: Colors.red),
-                        onPressed: () => _deleteBill(billId),
-                      ),
-                      children: [
-                        if (bill['imageUrls'] != null)
-                          Padding(
-                            padding: const EdgeInsets.all(12.0),
-                            child: Wrap(
-                              spacing: 12,
-                              runSpacing: 12,
-                              children: (bill['imageUrls'] as List).map<Widget>((url) => GestureDetector(
-                                onTap: () => _showFullScreenImage(url as String), // Tap to view full image
-                                child: MouseRegion(
-                                  cursor: SystemMouseCursors.click,
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(10),
-                                    child: Stack(
-                                      children: [
-                                        Image.network(url, width: 90, height: 90, fit: BoxFit.cover),
-                                        Positioned(
-                                          bottom: 0,
-                                          right: 0,
-                                          child: Container(
-                                            decoration: const BoxDecoration(
-                                              color: Colors.black54,
-                                              borderRadius: BorderRadius.only(topLeft: Radius.circular(8))
-                                            ),
-                                            child: const Icon(Icons.fullscreen, color: Colors.white, size: 20),
-                                          ),
-                                        )
-                                      ],
-                                    ),
-                                  ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(billData['title'] ?? 'Bill',
+                                    style: GoogleFonts.poppins(
+                                        fontWeight: FontWeight.w600,
+                                        color: const Color(0xFF6A1F1A))),
+                              ),
+                              if (_canDelete(createdAt))
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline,
+                                      color: Colors.redAccent),
+                                  onPressed: () => _deleteBill(billId),
                                 ),
-                              )).toList(),
-                            ),
+                            ],
                           ),
-                      ],
+                          Text("₹${billData['amount']}",
+                              style: GoogleFonts.poppins(color: Colors.brown)),
+                          const SizedBox(height: 4),
+                          if (createdAt != null && createdAt is Timestamp)
+                            Text(
+                                "Date: ${createdAt.toDate().day}/${createdAt.toDate().month}/${createdAt.toDate().year}",
+                                style:
+                                    GoogleFonts.poppins(color: Colors.brown)),
+                          const SizedBox(height: 8),
+                          if (billData['imageUrls'] != null &&
+                              (billData['imageUrls'] as List).isNotEmpty)
+                            SizedBox(
+                              height: 80,
+                              child: ListView(
+                                scrollDirection: Axis.horizontal,
+                                children: (billData['imageUrls'] as List)
+                                    .map<Widget>((url) => Padding(
+                                          padding:
+                                              const EdgeInsets.only(right: 8),
+                                          child: ClipRRect(
+                                            borderRadius:
+                                                BorderRadius.circular(10),
+                                            child: Image.network(url as String,
+                                                width: 80,
+                                                height: 80,
+                                                fit: BoxFit.cover),
+                                          ),
+                                        ))
+                                    .toList(),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   );
                 },
