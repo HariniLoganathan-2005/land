@@ -230,6 +230,110 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
     );
   }
 
+// --- NEW: Function to pick a date ---
+  Future<DateTime?> _pickDate(BuildContext context) async {
+    return await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime.now(), // Cannot pick past dates for new work
+      lastDate: DateTime(2030),
+    );
+  }
+
+  // --- NEW: The Dialog to Add Work ---
+  Future<void> _showAddWorkDialog() async {
+    final TextEditingController nameCtrl = TextEditingController();
+    DateTime? fromDate;
+    DateTime? toDate;
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              backgroundColor: backgroundCream,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+              title: Text('Add New Work', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: primaryMaroon)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 1. Work Name
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Work Name',
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                  const SizedBox(height: 15),
+
+                  // 2. From Date
+                  ListTile(
+                    tileColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    title: Text(fromDate == null ? 'From Date' : '${fromDate!.day}/${fromDate!.month}/${fromDate!.year}'),
+                    trailing: const Icon(Icons.calendar_today, color: primaryMaroon),
+                    onTap: () async {
+                      final picked = await _pickDate(context);
+                      if (picked != null) setStateDialog(() => fromDate = picked);
+                    },
+                  ),
+                  const SizedBox(height: 10),
+
+                  // 3. To Date
+                  ListTile(
+                    tileColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    title: Text(toDate == null ? 'To Date' : '${toDate!.day}/${toDate!.month}/${toDate!.year}'),
+                    trailing: const Icon(Icons.event, color: primaryMaroon),
+                    onTap: () async {
+                      final picked = await _pickDate(context);
+                      if (picked != null) setStateDialog(() => toDate = picked);
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: primaryMaroon),
+                  onPressed: () async {
+                    if (nameCtrl.text.isEmpty || fromDate == null || toDate == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Please fill all fields')));
+                      return;
+                    }
+                    
+                    // Save to Firestore (We create a new collection 'project_tasks')
+                    await _firestore.collection('project_tasks').add({
+                      'projectId': _projectId,
+                      'taskName': nameCtrl.text,
+                      'fromDate': fromDate,
+                      'toDate': toDate,
+                      'status': 'todo', // Default status
+                      'createdAt': FieldValue.serverTimestamp(),
+                    });
+
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Work Added Successfully!')));
+                  },
+                  child: const Text('Add Work', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _billsTab() {
     return Column(
       children: [
@@ -287,17 +391,105 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
 
   Widget _activitiesTab() => _activitiesTabUI();
 
-  Widget _activitiesTabUI() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
+// --- NEW: The Main Activities Tab with Sub-Tabs ---
+  Widget _activitiesTab() {
+    return DefaultTabController(
+      length: 3, // 3 Sub-tabs
       child: Column(
         children: [
-          TextField(controller: _godNameController, decoration: const InputDecoration(labelText: 'God Name')),
-          const SizedBox(height: 20),
-          ElevatedButton(onPressed: _submitActivityForm, child: const Text('Save')),
+          // The Sub-Header Tab Bar
+          Container(
+            color: Colors.white,
+            child: const TabBar(
+              labelColor: primaryMaroon,
+              unselectedLabelColor: Colors.grey,
+              indicatorColor: primaryMaroon,
+              tabs: [
+                Tab(text: "To Do"),
+                Tab(text: "Ongoing"),
+                Tab(text: "Completed"),
+              ],
+            ),
+          ),
+          
+          // The Content Area
+          Expanded(
+            child: TabBarView(
+              children: [
+                _buildTodoList(),    // 1. Works to be done
+                _buildOngoingList(), // 2. Ongoing
+                _buildCompletedList(), // 3. Completed
+              ],
+            ),
+          ),
         ],
       ),
+    );      
+  }
+  
+  Widget _buildTodoList() {
+    return Stack(
+      children: [
+        // List of tasks from Firestore
+        StreamBuilder<QuerySnapshot>(
+          stream: _firestore
+              .collection('project_tasks')
+              .where('projectId', isEqualTo: _projectId)
+              .where('status', isEqualTo: 'todo')
+              .snapshots(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+            final docs = snapshot.data!.docs;
+
+            if (docs.isEmpty) {
+              return Center(child: Text("No works to be done", style: GoogleFonts.poppins(color: Colors.grey)));
+            }
+
+            return ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: docs.length,
+              itemBuilder: (context, index) {
+                final data = docs[index].data() as Map<String, dynamic>;
+                // Converting Timestamp to String for display
+                DateTime from = (data['fromDate'] as Timestamp).toDate();
+                DateTime to = (data['toDate'] as Timestamp).toDate();
+
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  child: ListTile(
+                    title: Text(data['taskName'] ?? 'Unknown Work', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Text('From: ${from.day}/${from.month}  To: ${to.day}/${to.month}'),
+                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  ),
+                );
+              },
+            );
+          },
+        ),
+
+        // Floating "Add Work" Button
+        Positioned(
+          bottom: 20,
+          right: 20,
+          child: FloatingActionButton.extended(
+            backgroundColor: primaryMaroon,
+            onPressed: _showAddWorkDialog, // Calls the dialog we made in Step 1
+            icon: const Icon(Icons.add, color: Colors.white),
+            label: const Text("Add Work", style: TextStyle(color: Colors.white)),
+          ),
+        ),
+      ],
     );
+  }
+
+  // Placeholder for Ongoing (You can fill logic later)
+  Widget _buildOngoingList() {
+    return const Center(child: Text("Ongoing works will appear here"));
+  }
+
+  // Placeholder for Completed (You can fill logic later)
+  Widget _buildCompletedList() {
+    return const Center(child: Text("Completed works will appear here"));
   }
 
   Widget _transactionsTab() {
