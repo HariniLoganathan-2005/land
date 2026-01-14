@@ -65,7 +65,7 @@ class _TempleDetailScreenState extends State<TempleDetailScreen> {
     if (temple == null) return;
     final t = temple!;
 
-    // 1. Status Logic
+    // 1. Status Logic: Check for Rejected status first
     final String currentStatus = (t['status'] ?? 'pending').toString().toLowerCase();
     final bool isSanctioned = t['isSanctioned'] == true;
     final int progress = ((t['progress'] ?? 0) as num).toInt();
@@ -80,33 +80,12 @@ class _TempleDetailScreenState extends State<TempleDetailScreen> {
       t['status'] = 'ongoing';
     }
 
-    // 2. REMOVED AADHAR LOGIC
-    // We explicitly remove these keys so they don't accidentally appear in UI
-    t.remove('aadhar');
-    t.remove('userAadhar');
-    t.remove('aadharNumber');
+    // 2. BUG FIX: Normalize Aadhar from user app key 'aadhar' to admin app key 'userAadhar'
+    t['userAadhar'] = (t['userAadhar'] ?? t['aadhar'] ?? 'Not provided').toString();
 
-    // 3. FIX: Site Images Logic (Based on your Firestore key: imageUrls)
-    if (t['imageUrls'] != null) {
-      if (t['imageUrls'] is List) {
-        // Convert List<dynamic> to List<String> and filter empty values
-        t['imageUrls'] = (t['imageUrls'] as List)
-            .map((e) => e.toString())
-            .where((url) => url.startsWith('http'))
-            .toList();
-      } else if (t['imageUrls'] is String && t['imageUrls'].toString().startsWith('http')) {
-        t['imageUrls'] = [t['imageUrls'].toString()];
-      } else {
-        t['imageUrls'] = <String>[];
-      }
-    } else if (t['siteImages'] != null && t['siteImages'] is List) {
-      // Fallback to siteImages if imageUrls is null
-      t['imageUrls'] = (t['siteImages'] as List)
-          .map((e) => e.toString())
-          .where((url) => url.startsWith('http'))
-          .toList();
-    } else {
-      t['imageUrls'] = <String>[];
+    // 3. BUG FIX: Normalize Site Images from user app key 'siteImages' to admin app key 'imageUrls'
+    if (t['imageUrls'] == null || (t['imageUrls'] as List).isEmpty) {
+      t['imageUrls'] = t['siteImages'] ?? [];
     }
 
     // Ensure User Info fallback
@@ -147,28 +126,26 @@ class _TempleDetailScreenState extends State<TempleDetailScreen> {
     }
 
     final String status = (temple!['status'] ?? 'pending').toString();
-    final displayData = Map<String, dynamic>.from(temple!);
 
     switch (status) {
       case 'pending':
         return PendingTempleDetailScreen(
-          temple: displayData,
+          temple: temple!,
           onUpdated: (updated) => Navigator.pop(context, updated),
-          onDeleted: () => _markAsRejected(),
+          onDeleted: () => _markAsRejected(), // Handle rejection as a status update
         );
       case 'ongoing':
         return OngoingTempleDetailScreen(
-          temple: displayData,
+          temple: temple!,
           onUpdated: (updated) => Navigator.pop(context, updated),
         );
       case 'completed':
         return CompletedTempleDetailScreen(
-          temple: displayData,
+          temple: temple!,
           onUpdated: (updated) => Navigator.pop(context, updated),
         );
       case 'rejected':
         return Scaffold(
-          backgroundColor: backgroundCream,
           appBar: AppBar(backgroundColor: Colors.red[900], title: const Text("Rejected Project")),
           body: const Center(child: Text("This project has been rejected.")),
         );
@@ -177,6 +154,7 @@ class _TempleDetailScreenState extends State<TempleDetailScreen> {
     }
   }
 
+  // New helper to handle the rejection display for User Phase
   void _markAsRejected() async {
     await FirebaseFirestore.instance
         .collection('projects')

@@ -37,6 +37,7 @@ class _TempleDetailScreenState extends State<TempleDetailScreen> {
     if (!mounted) return;
     setState(() => isLoading = true);
 
+    // Initialize with initial data
     temple = Map<String, dynamic>.from(widget.initialTempleData);
 
     try {
@@ -47,6 +48,7 @@ class _TempleDetailScreenState extends State<TempleDetailScreen> {
 
       if (doc.exists && doc.data() != null) {
         final data = doc.data()!;
+        // Merge fresh data from Firestore
         temple!.addAll(data);
         temple!['id'] = widget.templeId;
       }
@@ -54,6 +56,7 @@ class _TempleDetailScreenState extends State<TempleDetailScreen> {
       debugPrint('Error loading temple: $e');
     }
 
+    // CRITICAL: We normalize BEFORE we stop loading so the UI gets the right keys
     _normalizeTempleFields();
 
     if (mounted) {
@@ -80,33 +83,18 @@ class _TempleDetailScreenState extends State<TempleDetailScreen> {
       t['status'] = 'ongoing';
     }
 
-    // 2. REMOVED AADHAR LOGIC
-    // We explicitly remove these keys so they don't accidentally appear in UI
-    t.remove('aadhar');
-    t.remove('userAadhar');
-    t.remove('aadharNumber');
+    // 2. FIX: Check if aadhar exists and force it into userAadhar
+    final String aadharVal = (t['aadhar'] ?? t['userAadhar'] ?? '').toString();
+    t['userAadhar'] = aadharVal.isEmpty ? 'Not provided' : aadharVal;
 
-    // 3. FIX: Site Images Logic (Based on your Firestore key: imageUrls)
-    if (t['imageUrls'] != null) {
-      if (t['imageUrls'] is List) {
-        // Convert List<dynamic> to List<String> and filter empty values
-        t['imageUrls'] = (t['imageUrls'] as List)
-            .map((e) => e.toString())
-            .where((url) => url.startsWith('http'))
-            .toList();
-      } else if (t['imageUrls'] is String && t['imageUrls'].toString().startsWith('http')) {
-        t['imageUrls'] = [t['imageUrls'].toString()];
+    // 3. FIX: Site Images Logic
+    // If imageUrls is empty or null, fill it with siteImages
+    if (t['imageUrls'] == null || (t['imageUrls'] as List).isEmpty) {
+      if (t['siteImages'] != null && (t['siteImages'] as List).isNotEmpty) {
+        t['imageUrls'] = List<String>.from(t['siteImages']);
       } else {
         t['imageUrls'] = <String>[];
       }
-    } else if (t['siteImages'] != null && t['siteImages'] is List) {
-      // Fallback to siteImages if imageUrls is null
-      t['imageUrls'] = (t['siteImages'] as List)
-          .map((e) => e.toString())
-          .where((url) => url.startsWith('http'))
-          .toList();
-    } else {
-      t['imageUrls'] = <String>[];
     }
 
     // Ensure User Info fallback
@@ -147,12 +135,14 @@ class _TempleDetailScreenState extends State<TempleDetailScreen> {
     }
 
     final String status = (temple!['status'] ?? 'pending').toString();
+
+    // Use a copy of the normalized temple data
     final displayData = Map<String, dynamic>.from(temple!);
 
     switch (status) {
       case 'pending':
         return PendingTempleDetailScreen(
-          temple: displayData,
+          temple: displayData, // Passing the normalized data
           onUpdated: (updated) => Navigator.pop(context, updated),
           onDeleted: () => _markAsRejected(),
         );
@@ -168,7 +158,6 @@ class _TempleDetailScreenState extends State<TempleDetailScreen> {
         );
       case 'rejected':
         return Scaffold(
-          backgroundColor: backgroundCream,
           appBar: AppBar(backgroundColor: Colors.red[900], title: const Text("Rejected Project")),
           body: const Center(child: Text("This project has been rejected.")),
         );

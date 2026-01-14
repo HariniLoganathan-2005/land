@@ -31,6 +31,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     _loadUserData();
   }
 
+  /// Loads User Profile Data once
   Future<void> _loadUserData() async {
     try {
       final user = _auth.currentUser;
@@ -65,6 +66,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       context,
       MaterialPageRoute(builder: (context) => const CreateProjectScreen()),
     );
+    // No need to call load again because the StreamBuilder will catch the new doc
   }
 
   void _handleProjectTap(Map<String, dynamic> project) {
@@ -77,8 +79,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           builder: (_) => ProjectOverviewScreen(project: project),
         ),
       );
-    } else if (status == 'rejected') {
-      _showRejectedDialog();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -93,32 +93,24 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     }
   }
 
-  void _showRejectedDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Project Rejected', style: GoogleFonts.cinzel(fontWeight: FontWeight.bold, color: Colors.red[900])),
-        content: Text('Unfortunately, your proposal was not accepted at this time. You can delete this proposal and submit a new one.', style: GoogleFonts.poppins()),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
-        ],
-      ),
-    );
-  }
-
+  /// Delete function for the User to withdraw a pending plan
   Future<void> _deleteProject(String projectId) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: const Color(0xFFFFFDF5),
-        title: Text('Delete plan', style: GoogleFonts.cinzel(color: const Color(0xFF5D4037))),
-        content: const Text('This will remove your proposal. This action cannot be undone.'),
+        title: Text('Delete plan',
+            style: GoogleFonts.cinzel(color: const Color(0xFF5D4037))),
+        content: const Text(
+            'This will remove your proposal. This action cannot be undone.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFB71C1C)),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFB71C1C)),
             child: const Text('Delete', style: TextStyle(color: Colors.white)),
           ),
         ],
@@ -126,6 +118,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     );
 
     if (confirm == true) {
+      // Deleting this will trigger the StreamBuilder to update the UI automatically
       await _firestore.collection('projects').doc(projectId).delete();
     }
   }
@@ -135,7 +128,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     if (_loadingUser) {
       return const Scaffold(
           backgroundColor: Color(0xFFFFFDF5),
-          body: Center(child: CircularProgressIndicator(color: Color(0xFF5D4037))));
+          body: Center(
+              child: CircularProgressIndicator(color: Color(0xFF5D4037))));
     }
 
     final photoUrl = _userData?['photoUrl'] as String?;
@@ -158,7 +152,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               Expanded(
                 child: SingleChildScrollView(
                   physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 20.0, vertical: 12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -166,6 +161,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       const SizedBox(height: 26),
                       _projectHeader(),
                       const SizedBox(height: 14),
+                      // Pass the logic to the button via Stream check
                       _buildProjectLogicSection(),
                       const SizedBox(height: 80),
                     ],
@@ -181,6 +177,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     );
   }
 
+  /// This widget handles the real-time updates for projects
   Widget _buildProjectLogicSection() {
     final user = _auth.currentUser;
     if (user == null) return const SizedBox.shrink();
@@ -197,30 +194,28 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final bool hasDocs = snapshot.hasData && snapshot.data!.docs.isNotEmpty;
-        Map<String, dynamic>? projectData;
-        String status = '';
+        final bool hasProject =
+            snapshot.hasData && snapshot.data!.docs.isNotEmpty;
 
-        if (hasDocs) {
+        // Extract project data if it exists
+        Map<String, dynamic>? projectData;
+        if (hasProject) {
           final doc = snapshot.data!.docs.first;
           projectData = {'id': doc.id, ...doc.data() as Map<String, dynamic>};
-          status = (projectData['status'] ?? 'pending').toString().toLowerCase();
         }
-
-        // UPDATED LOGIC: Allow Propose a plan if no project exists OR if it is rejected
-        final bool canPropose = !hasDocs || status == 'rejected';
 
         return Column(
           children: [
-            _createProjectButton(canPropose),
+            _createProjectButton(hasProject),
             const SizedBox(height: 18),
-            if (hasDocs)
+            if (hasProject)
               _projectSection(projectData!)
             else
               const Center(
                 child: Padding(
                   padding: EdgeInsets.all(20.0),
-                  child: Text("No plans proposed yet.", style: TextStyle(color: Colors.grey)),
+                  child: Text("No plans proposed yet.",
+                      style: TextStyle(color: Colors.grey)),
                 ),
               ),
           ],
@@ -237,23 +232,39 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         children: [
           Row(children: [
             Container(
-              width: 54, height: 54,
+              width: 54,
+              height: 54,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: const LinearGradient(colors: [Color(0xFFD4AF37), Color(0xFFB8962E)]),
-                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8, offset: const Offset(0, 4))],
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFD4AF37), Color(0xFFB8962E)],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 8,
+                      offset: const Offset(0, 4)),
+                ],
               ),
               child: Padding(
                 padding: const EdgeInsets.all(3),
-                child: ClipOval(child: Image.asset('assets/images/shiva.png', fit: BoxFit.cover)),
+                child: ClipOval(
+                    child: Image.asset('assets/images/shiva.png',
+                        fit: BoxFit.cover)),
               ),
             ),
             const SizedBox(width: 12),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Aranpani', style: GoogleFonts.cinzelDecorative(fontSize: 20, fontWeight: FontWeight.bold, color: const Color(0xFF5D4037))),
-                Text('Welcome', style: GoogleFonts.poppins(color: const Color(0xFF8D6E63), fontSize: 12)),
+                Text('Aranpani',
+                    style: GoogleFonts.cinzelDecorative(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF5D4037))),
+                Text('Welcome',
+                    style: GoogleFonts.poppins(
+                        color: const Color(0xFF8D6E63), fontSize: 12)),
               ],
             ),
           ]),
@@ -269,61 +280,63 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   Widget _welcomeCard() {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: const Color(0xFFEFE6D5), borderRadius: BorderRadius.circular(18)),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFE6D5),
+        borderRadius: BorderRadius.circular(18),
+      ),
       child: Row(
         children: [
-          const CircleAvatar(backgroundColor: Color(0xFF5D4037), child: Icon(Icons.person, color: Colors.white)),
+          const CircleAvatar(
+            backgroundColor: Color(0xFF5D4037),
+            child: Icon(Icons.person, color: Colors.white),
+          ),
           const SizedBox(width: 14),
-          Text('Welcome back, ${_userData?['name'] ?? 'User'}', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: const Color(0xFF3E2723))),
+          Text('Welcome back, ${_userData?['name'] ?? 'User'}',
+              style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.bold, color: const Color(0xFF3E2723))),
         ],
       ),
     );
   }
 
   Widget _projectHeader() {
-    return Text('My Proposal', style: GoogleFonts.cinzel(fontSize: 20, fontWeight: FontWeight.bold, color: const Color(0xFF3E2723)));
+    return Text('My Proposal',
+        style: GoogleFonts.cinzel(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFF3E2723)));
   }
 
-  Widget _createProjectButton(bool canPropose) {
+  Widget _createProjectButton(bool hasProject) {
     return SizedBox(
       width: double.infinity,
       height: 56,
       child: ElevatedButton.icon(
         icon: const Icon(Icons.add_circle_outline),
-        label: Text(canPropose ? "Propose a plan" : "Plan Submitted"),
+        label: Text(hasProject ? "Plan Submitted" : "Propose a plan"),
         style: ElevatedButton.styleFrom(
-          backgroundColor: canPropose ? const Color(0xFF5D4037) : Colors.grey[400],
+          backgroundColor:
+              hasProject ? Colors.grey[400] : const Color(0xFF5D4037),
           foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
-        onPressed: canPropose ? _navigateToCreateProject : null,
+        onPressed: hasProject ? null : _navigateToCreateProject,
       ),
     );
   }
 
   Widget _projectSection(Map<String, dynamic> project) {
-    final String status = (project['status'] ?? 'pending').toString().toLowerCase();
-    
-    // UI Logic for different statuses
-    Color statusColor;
-    Color bgColor;
-    IconData statusIcon;
-    String statusText = status.toUpperCase();
+    final String status =
+        (project['status'] ?? 'pending').toString().toLowerCase();
+    final bool isApproved = status == 'approved' || status == 'ongoing';
 
-    if (status == 'rejected') {
-      statusColor = Colors.red.shade800;
-      bgColor = Colors.red.shade50;
-      statusIcon = Icons.cancel_outlined;
-    } else if (status == 'approved' || status == 'ongoing') {
-      statusColor = Colors.green.shade700;
-      bgColor = Colors.green.shade50;
-      statusIcon = Icons.check_circle_rounded;
-    } else {
-      statusColor = Colors.orange.shade800;
-      bgColor = Colors.orange.shade50;
-      statusIcon = Icons.hourglass_empty_rounded;
-      statusText = "PENDING";
-    }
+    final Color statusColor =
+        isApproved ? Colors.green.shade700 : Colors.orange.shade800;
+    final Color bgColor =
+        isApproved ? Colors.green.shade50 : Colors.orange.shade50;
+    final IconData statusIcon =
+        isApproved ? Icons.check_circle_rounded : Icons.hourglass_empty_rounded;
 
     return InkWell(
       onTap: () => _handleProjectTap(project),
@@ -333,7 +346,12 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: statusColor.withOpacity(0.3), width: 1),
-          boxShadow: [BoxShadow(color: statusColor.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 8))],
+          boxShadow: [
+            BoxShadow(
+                color: statusColor.withOpacity(0.05),
+                blurRadius: 15,
+                offset: const Offset(0, 8))
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -342,53 +360,77 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(8)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                      color: bgColor, borderRadius: BorderRadius.circular(8)),
                   child: Row(
                     children: [
                       Icon(statusIcon, size: 14, color: statusColor),
                       const SizedBox(width: 5),
-                      Text(statusText, style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: statusColor)),
+                      Text(
+                        status.toUpperCase(),
+                        style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: statusColor),
+                      ),
                     ],
                   ),
                 ),
-                Text(project['projectId'] ?? '', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey)),
+                Text(
+                  project['projectId'] ?? '',
+                  style: GoogleFonts.poppins(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey),
+                ),
               ],
             ),
             const SizedBox(height: 16),
-            Text(project['place'] ?? 'Unnamed Temple', style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold, color: const Color(0xFF3E2723))),
+            Text(
+              project['place'] ?? 'Unnamed Temple',
+              style: GoogleFonts.poppins(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF3E2723)),
+            ),
             const SizedBox(height: 4),
             Row(
               children: [
                 const Icon(Icons.location_on, size: 14, color: Color(0xFF8D6E63)),
                 const SizedBox(width: 4),
-                Text("${project['taluk']}, ${project['district']}", style: GoogleFonts.poppins(fontSize: 13, color: const Color(0xFF8D6E63))),
+                Text(
+                  "${project['taluk']}, ${project['district']}",
+                  style: GoogleFonts.poppins(
+                      fontSize: 13, color: const Color(0xFF8D6E63)),
+                ),
               ],
             ),
             const Divider(height: 30),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
-                  child: Text(
-                    status == 'rejected' 
-                        ? 'Project rejected by admin. Please delete to retry.'
-                        : (status == 'approved' || status == 'ongoing') ? 'Tap to view work progress' : 'Waiting for sanction...',
-                    style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: status == 'rejected' ? Colors.red[800] : (status == 'approved' || status == 'ongoing' ? const Color(0xFF5D4037) : Colors.grey),
-                        fontStyle: (status == 'approved' || status == 'ongoing') ? FontStyle.normal : FontStyle.italic),
-                  ),
+                Text(
+                  isApproved
+                      ? 'Tap to view work progress'
+                      : 'Waiting for sanction...',
+                  style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: isApproved ? const Color(0xFF5D4037) : Colors.grey,
+                      fontStyle:
+                          isApproved ? FontStyle.normal : FontStyle.italic),
                 ),
-                // Show delete button for BOTH Pending and Rejected statuses
-                if (status == 'pending' || status == 'rejected')
+                if (status == 'pending')
                   IconButton(
-                    icon: const Icon(Icons.delete_sweep_outlined, color: Colors.redAccent),
+                    icon: const Icon(Icons.delete_sweep_outlined,
+                        color: Colors.redAccent),
                     onPressed: () => _deleteProject(project['id']),
                   )
                 else
-                  const Icon(Icons.arrow_forward_ios, size: 14, color: Color(0xFF5D4037)),
+                  const Icon(Icons.arrow_forward_ios,
+                      size: 14, color: Color(0xFF5D4037)),
               ],
             ),
           ],
@@ -414,7 +456,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   }
 
   Future<void> _openProfile() async {
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen()));
+    await Navigator.push(
+        context, MaterialPageRoute(builder: (_) => const ProfileScreen()));
     _loadUserData();
     setState(() => _currentIndex = 0);
   }
@@ -430,14 +473,19 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         children: [
           UserAccountsDrawerHeader(
             decoration: const BoxDecoration(color: Color(0xFFF5E6CA)),
-            accountName: Text(_userData?['name'] ?? 'User', style: const TextStyle(color: Color(0xFF3E2723))),
-            accountEmail: Text(_userData?['email'] ?? '', style: const TextStyle(color: Color(0xFF3E2723))),
+            accountName: Text(_userData?['name'] ?? 'User',
+                style: const TextStyle(color: Color(0xFF3E2723))),
+            accountEmail: Text(_userData?['email'] ?? '',
+                style: const TextStyle(color: Color(0xFF3E2723))),
             currentAccountPicture: CircleAvatar(
               backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
               child: photoUrl == null ? const Icon(Icons.person) : null,
             ),
           ),
-          ListTile(leading: const Icon(Icons.logout), title: const Text('Logout'), onTap: _logout),
+          ListTile(
+              leading: const Icon(Icons.logout),
+              title: const Text('Logout'),
+              onTap: _logout),
         ],
       ),
     );
