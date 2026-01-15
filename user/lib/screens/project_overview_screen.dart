@@ -47,6 +47,12 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
   String _formatDate(DateTime date) {
     return "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
   }
+  
+  String _formatTimestamp(Timestamp? timestamp) {
+    if (timestamp == null) return "N/A";
+    DateTime date = timestamp.toDate();
+    return "${date.day}/${date.month}/${date.year}";
+  }
 
   void _showFullScreenImage(String imageUrl) {
     showDialog(
@@ -144,19 +150,9 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
     );
   }
 
-  Future<DateTime?> _pickDate(BuildContext context) async {
-    return await showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime.now(),
-      lastDate: DateTime(2030),
-    );
-  }
-
+  // UPDATED: Only asks for Name
   Future<void> _showAddWorkDialog() async {
     final TextEditingController nameCtrl = TextEditingController();
-    DateTime? fromDate;
-    DateTime? toDate;
 
     await showDialog(
       context: context,
@@ -180,26 +176,9 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
                     ),
                   ),
                   const SizedBox(height: 15),
-                  ListTile(
-                    tileColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    title: Text(fromDate == null ? 'From Date' : '${fromDate!.day}/${fromDate!.month}/${fromDate!.year}'),
-                    trailing: const Icon(Icons.calendar_today, color: primaryMaroon),
-                    onTap: () async {
-                      final picked = await _pickDate(context);
-                      if (picked != null) setStateDialog(() => fromDate = picked);
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  ListTile(
-                    tileColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    title: Text(toDate == null ? 'To Date' : '${toDate!.day}/${toDate!.month}/${toDate!.year}'),
-                    trailing: const Icon(Icons.event, color: primaryMaroon),
-                    onTap: () async {
-                      final picked = await _pickDate(context);
-                      if (picked != null) setStateDialog(() => toDate = picked);
-                    },
+                  const Text(
+                    "Note: Start date will be captured automatically when you start the work.",
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                 ],
               ),
@@ -211,17 +190,16 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: primaryMaroon),
                   onPressed: () async {
-                    if (nameCtrl.text.isEmpty || fromDate == null || toDate == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill all fields')));
+                    if (nameCtrl.text.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter work name')));
                       return;
                     }
                     await _firestore.collection('project_tasks').add({
                       'projectId': _projectId,
                       'taskName': nameCtrl.text,
-                      'fromDate': fromDate,
-                      'toDate': toDate,
                       'status': 'todo',
                       'createdAt': FieldValue.serverTimestamp(),
+                      // Dates are now captured during state changes
                     });
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Work Added Successfully!')));
@@ -292,7 +270,6 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
     );
   }
 
-  // --- UPDATED UPLOAD BILL DIALOG ---
   Future<void> _showUploadBillDialog() async {
     final titleCtrl = TextEditingController();
     final amountCtrl = TextEditingController();
@@ -436,16 +413,9 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
                 final data = docs[index].data() as Map<String, dynamic>;
                 final docId = docs[index].id;
                 
-                DateTime from = DateTime.now();
-                if (data['fromDate'] != null) from = (data['fromDate'] as Timestamp).toDate();
-                DateTime to = DateTime.now();
-                if (data['toDate'] != null) to = (data['toDate'] as Timestamp).toDate();
-
                 return TodoTaskCard(
                   taskId: docId,
                   taskName: data['taskName'] ?? 'Unknown Work',
-                  fromDate: _formatDate(from),
-                  toDate: _formatDate(to),
                   userId: _userId,
                   projectId: _projectId,
                 );
@@ -491,16 +461,14 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
             final docId = docs[index].id;
             final status = data['status'] ?? 'ongoing';
             
-            DateTime from = DateTime.now();
-            if (data['fromDate'] != null) from = (data['fromDate'] as Timestamp).toDate();
-            DateTime to = DateTime.now();
-            if (data['toDate'] != null) to = (data['toDate'] as Timestamp).toDate();
+            // Display Start date if available
+            Timestamp? startTs = data['startedAt'];
+            String dateDisplay = startTs != null ? "Started: ${_formatTimestamp(startTs)}" : "Date not captured";
 
             return OngoingTaskCard(
               taskId: docId,
               taskName: data['taskName'] ?? 'Unknown Work',
-              fromDate: _formatDate(from),
-              toDate: _formatDate(to),
+              dateDisplay: dateDisplay,
               userId: _userId,
               projectId: _projectId,
               currentStatus: status, 
@@ -532,6 +500,13 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
           itemBuilder: (context, index) {
             final data = docs[index].data() as Map<String, dynamic>;
             
+            // Extract Dates
+            Timestamp? startTs = data['startedAt'];
+            Timestamp? endTs = data['completedAt'];
+
+            String startStr = _formatTimestamp(startTs);
+            String endStr = _formatTimestamp(endTs);
+
             return Card(
               margin: const EdgeInsets.only(bottom: 12),
               child: ListTile(
@@ -540,7 +515,14 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
                   data['taskName'] ?? '', 
                   style: const TextStyle(fontWeight: FontWeight.bold) 
                 ),
-                subtitle: const Text("Work Completed"),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text("Work Completed"),
+                    const SizedBox(height: 4),
+                    Text("Start: $startStr | End: $endStr", style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                  ],
+                ),
                 trailing: const Icon(Icons.verified, color: Colors.blue),
               ),
             );
@@ -670,13 +652,11 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
 }
 
 // =========================================================
-// 1. TODO TASK CARD
+// 1. TODO TASK CARD (UPDATED)
 // =========================================================
 class TodoTaskCard extends StatefulWidget {
   final String taskId;
   final String taskName;
-  final String fromDate;
-  final String toDate;
   final String userId;
   final String projectId;
 
@@ -684,8 +664,6 @@ class TodoTaskCard extends StatefulWidget {
     super.key,
     required this.taskId,
     required this.taskName,
-    required this.fromDate,
-    required this.toDate,
     required this.userId,
     required this.projectId,
   });
@@ -742,10 +720,12 @@ class _TodoTaskCardState extends State<TodoTaskCard> {
         String? url = await CloudinaryService.uploadImage(imageFile: image, userId: widget.userId, projectId: widget.projectId);
         if (url != null) uploadedUrls.add(url);
       }
+      
+      // CAPTURE START DATE HERE
       await FirebaseFirestore.instance.collection('project_tasks').doc(widget.taskId).update({
         'status': 'ongoing',
         'startImages': uploadedUrls,
-        'startedAt': FieldValue.serverTimestamp(),
+        'startedAt': FieldValue.serverTimestamp(), // Capture current time as Start Date
       });
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Work Started! Moved to Ongoing.")));
     } catch (e) {
@@ -774,9 +754,10 @@ class _TodoTaskCardState extends State<TodoTaskCard> {
                 IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20), onPressed: _deleteTask),
               ],
             ),
-            Text("${widget.fromDate} to ${widget.toDate}", style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey[600])),
+            // No Date displayed here as it hasn't started
+            Text("Not started yet", style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey[600], fontStyle: FontStyle.italic)),
             const SizedBox(height: 16),
-            Text("Upload Progress Photo:", style: GoogleFonts.poppins(fontSize: 14, color: Colors.black87)),
+            Text("Upload Start Photo:", style: GoogleFonts.poppins(fontSize: 14, color: Colors.black87)),
             const SizedBox(height: 8),
             Row(
               children: [
@@ -824,13 +805,12 @@ class _TodoTaskCardState extends State<TodoTaskCard> {
 }
 
 // =========================================================
-// 2. ONGOING TASK CARD
+// 2. ONGOING TASK CARD (UPDATED)
 // =========================================================
 class OngoingTaskCard extends StatefulWidget {
   final String taskId;
   final String taskName;
-  final String fromDate;
-  final String toDate;
+  final String dateDisplay;
   final String userId;
   final String projectId;
   final String currentStatus;
@@ -839,8 +819,7 @@ class OngoingTaskCard extends StatefulWidget {
     super.key,
     required this.taskId,
     required this.taskName,
-    required this.fromDate,
-    required this.toDate,
+    required this.dateDisplay,
     required this.userId,
     required this.projectId,
     required this.currentStatus,
@@ -929,7 +908,7 @@ class _OngoingTaskCardState extends State<OngoingTaskCard> {
                 IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20), onPressed: _deleteTask),
               ],
             ),
-            Text("${widget.fromDate} to ${widget.toDate}", style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey[600])),
+            Text(widget.dateDisplay, style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey[600])),
             const SizedBox(height: 16),
             
             if (!isPending) ...[
