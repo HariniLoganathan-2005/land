@@ -8,7 +8,7 @@ import '../screens/profile_screen.dart';
 import 'splash_screen.dart';
 import '../screens/project_overview_screen.dart';
 import '../screens/user_completed_project_screen.dart';
-import '../screens/all_completed_works_screen.dart'; 
+import '../screens/all_completed_works_screen.dart'; // Import for the history page
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
@@ -68,6 +68,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     );
   }
 
+  // Navigate to the separate completed projects section
   void _navigateToHistory() {
     Navigator.push(
       context,
@@ -128,6 +129,29 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     );
   }
 
+  Future<void> _deleteProject(String projectId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFFFFFDF5),
+        title: Text('Delete plan', style: GoogleFonts.cinzel(color: const Color(0xFF5D4037))),
+        content: const Text('This will remove your proposal. This action cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFB71C1C)),
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await _firestore.collection('projects').doc(projectId).delete();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loadingUser) {
@@ -167,7 +191,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       const SizedBox(height: 26),
                       _projectHeader(),
                       const SizedBox(height: 14),
-                      _buildProjectLogicSection(),
+                      _buildProjectLogicSection(), // Only shows Non-Completed plans
                       const SizedBox(height: 80),
                     ],
                   ),
@@ -216,10 +240,19 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               ],
             ),
           ]),
-          // Only the Menu Icon remains here
-          IconButton(
-            onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-            icon: const Icon(Icons.menu, color: Color(0xFF5D4037)),
+          Row(
+            children: [
+              // HISTORY ICON: Moves the user to the completed projects part
+              IconButton(
+                onPressed: _navigateToHistory,
+                icon: const Icon(Icons.history_edu_rounded, color: Color(0xFF5D4037), size: 28),
+                tooltip: 'View Completed Works',
+              ),
+              IconButton(
+                onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                icon: const Icon(Icons.menu, color: Color(0xFF5D4037)),
+              ),
+            ],
           ),
         ],
       ),
@@ -264,6 +297,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           return const Center(child: CircularProgressIndicator());
         }
 
+        // FILTER: Remove completed projects from the Home Screen list
         final activeDocs = snapshot.data?.docs.where((doc) {
               final status = (doc['status'] ?? '').toString().toLowerCase();
               return status != 'completed';
@@ -333,6 +367,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       statusColor = Colors.green.shade700;
       bgColor = Colors.green.shade50;
       statusIcon = Icons.check_circle_rounded;
+    } else if (status == 'completed') {
+      statusColor = Colors.blue.shade800;
+      bgColor = Colors.blue.shade50;
+      statusIcon = Icons.verified_rounded;
+      statusText = 'COMPLETED';
     } else {
       statusColor = Colors.orange.shade800;
       bgColor = Colors.orange.shade50;
@@ -403,7 +442,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    'Click to view details',
+                    status == 'completed' ? 'Click to view completion details' : 'Click to view details',
                     style: GoogleFonts.poppins(fontSize: 12, color: statusColor),
                   ),
                 ),
@@ -438,6 +477,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     setState(() => _currentIndex = 0);
   }
 
+  Future<void> _logout() async {
+    await _auth.signOut();
+    _redirectToSplash();
+  }
+
   Widget _buildDrawer(String? photoUrl) {
     return Drawer(
       child: ListView(
@@ -459,14 +503,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               _navigateToHistory();
             },
           ),
-          ListTile(
-            leading: const Icon(Icons.logout), 
-            title: const Text('Logout'), 
-            onTap: () async {
-              await _auth.signOut();
-              _redirectToSplash();
-            }
-          ),
+          ListTile(leading: const Icon(Icons.logout), title: const Text('Logout'), onTap: _logout),
         ],
       ),
     );

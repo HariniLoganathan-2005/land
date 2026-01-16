@@ -68,39 +68,25 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     );
   }
 
-  void _navigateToHistory() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const AllCompletedWorksScreen()),
-    );
-  }
-
   void _handleProjectTap(Map<String, dynamic> project) {
     final status = (project['status'] ?? 'pending').toString().toLowerCase();
 
     if (status == 'approved' || status == 'ongoing') {
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (_) => ProjectOverviewScreen(project: project),
-        ),
+        MaterialPageRoute(builder: (_) => ProjectOverviewScreen(project: project)),
       );
     } else if (status == 'completed') {
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (_) => UserCompletedProjectScreen(project: project),
-        ),
+        MaterialPageRoute(builder: (_) => UserCompletedProjectScreen(project: project)),
       );
     } else if (status == 'rejected') {
       _showRejectedDialog();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Your plan is currently under review. You can access the project dashboard once it is sanctioned.',
-            style: GoogleFonts.poppins(),
-          ),
+          content: Text('Plan is under review. Access dashboard once sanctioned.', style: GoogleFonts.poppins()),
           backgroundColor: const Color(0xFF5D4037),
           behavior: SnackBarBehavior.floating,
         ),
@@ -113,14 +99,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(
-          'Project Rejected',
-          style: GoogleFonts.cinzel(fontWeight: FontWeight.bold, color: Colors.red[900]),
-        ),
-        content: Text(
-          'Unfortunately, your proposal was not accepted at this time. You can delete this proposal and submit a new one.',
-          style: GoogleFonts.poppins(),
-        ),
+        title: Text('Project Rejected', style: GoogleFonts.cinzel(fontWeight: FontWeight.bold, color: Colors.red[900])),
+        content: Text('Proposal not accepted. You can delete and submit a new one.', style: GoogleFonts.poppins()),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
         ],
@@ -128,14 +108,35 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     );
   }
 
+  Future<void> _deleteProject(String projectId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFFFFFDF5),
+        title: Text('Delete plan', style: GoogleFonts.cinzel(color: const Color(0xFF5D4037))),
+        content: const Text('This action cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFB71C1C)),
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await _firestore.collection('projects').doc(projectId).delete();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loadingUser) {
       return const Scaffold(
         backgroundColor: Color(0xFFFFFDF5),
-        body: Center(
-          child: CircularProgressIndicator(color: Color(0xFF5D4037)),
-        ),
+        body: Center(child: CircularProgressIndicator(color: Color(0xFF5D4037))),
       );
     }
 
@@ -182,73 +183,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     );
   }
 
-  Widget _header() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 18),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(children: [
-            Container(
-              width: 54,
-              height: 54,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(colors: [Color(0xFFD4AF37), Color(0xFFB8962E)]),
-                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 4))],
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(3),
-                child: ClipOval(
-                  child: Image.asset('assets/images/shiva.png', fit: BoxFit.cover),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Aranpani',
-                    style: GoogleFonts.cinzelDecorative(
-                        fontSize: 20, fontWeight: FontWeight.bold, color: const Color(0xFF5D4037))),
-                Text('Welcome',
-                    style: GoogleFonts.poppins(color: const Color(0xFF8D6E63), fontSize: 12)),
-              ],
-            ),
-          ]),
-          // Only the Menu Icon remains here
-          IconButton(
-            onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-            icon: const Icon(Icons.menu, color: Color(0xFF5D4037)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _welcomeCard() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: const Color(0xFFEFE6D5), borderRadius: BorderRadius.circular(18)),
-      child: Row(
-        children: [
-          const CircleAvatar(
-              backgroundColor: Color(0xFF5D4037), child: Icon(Icons.person, color: Colors.white)),
-          const SizedBox(width: 14),
-          Text(
-            'Welcome back, ${_userData?['name'] ?? 'User'}',
-            style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: const Color(0xFF3E2723)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _projectHeader() {
-    return Text('Current Proposal',
-        style: GoogleFonts.cinzel(fontSize: 20, fontWeight: FontWeight.bold, color: const Color(0xFF3E2723)));
-  }
-
   Widget _buildProjectLogicSection() {
     final user = _auth.currentUser;
     if (user == null) return const SizedBox.shrink();
@@ -264,34 +198,33 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final activeDocs = snapshot.data?.docs.where((doc) {
-              final status = (doc['status'] ?? '').toString().toLowerCase();
-              return status != 'completed';
-            }).toList() ?? [];
+        final allDocs = snapshot.data?.docs ?? [];
+        
+        // Disable button if any project is not 'completed' and not 'rejected'
+        final bool hasActiveProject = allDocs.any((doc) {
+          String s = (doc['status'] ?? '').toString().toLowerCase();
+          return s != 'completed' && s != 'rejected';
+        });
 
-        final bool hasActive = activeDocs.isNotEmpty;
-        Map<String, dynamic>? projectData;
-
-        if (hasActive) {
-          final doc = activeDocs.first;
-          projectData = {
-            'id': doc.id,
-            'projectId': doc.id,
-            ...doc.data() as Map<String, dynamic>,
-          };
-        }
+        // Filter for main UI: exclude completed projects
+        final currentWorkDoc = allDocs.where((doc) {
+          return (doc['status'] ?? '').toString().toLowerCase() != 'completed';
+        }).toList();
 
         return Column(
           children: [
-            _createProjectButton(!hasActive),
+            _createProjectButton(!hasActiveProject),
             const SizedBox(height: 18),
-            if (hasActive)
-              _projectSection(projectData!)
+            if (currentWorkDoc.isNotEmpty)
+              _projectSection({
+                'id': currentWorkDoc.first.id,
+                ...currentWorkDoc.first.data() as Map<String, dynamic>,
+              })
             else
               const Center(
                 child: Padding(
                   padding: EdgeInsets.all(20.0),
-                  child: Text("No active plans at the moment.", style: TextStyle(color: Colors.grey)),
+                  child: Text("No active plans.", style: TextStyle(color: Colors.grey)),
                 ),
               ),
           ],
@@ -300,46 +233,81 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     );
   }
 
+  Widget _header() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 18),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(children: [
+            Container(
+              width: 54, height: 54,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(colors: [Color(0xFFD4AF37), Color(0xFFB8962E)]),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(3),
+                child: ClipOval(child: Image.asset('assets/images/shiva.png', fit: BoxFit.cover)),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Aranpani', style: GoogleFonts.cinzelDecorative(fontSize: 20, fontWeight: FontWeight.bold, color: const Color(0xFF5D4037))),
+                Text('Welcome', style: GoogleFonts.poppins(color: const Color(0xFF8D6E63), fontSize: 12)),
+              ],
+            ),
+          ]),
+          IconButton(
+            onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+            icon: const Icon(Icons.menu, color: Color(0xFF5D4037)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _welcomeCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(color: const Color(0xFFEFE6D5), borderRadius: BorderRadius.circular(18)),
+      child: Row(
+        children: [
+          const CircleAvatar(backgroundColor: Color(0xFF5D4037), child: Icon(Icons.person, color: Colors.white)),
+          const SizedBox(width: 14),
+          Text('Welcome, ${_userData?['name'] ?? 'User'}', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: const Color(0xFF3E2723))),
+        ],
+      ),
+    );
+  }
+
+  Widget _projectHeader() => Text('My Active Proposal', style: GoogleFonts.cinzel(fontSize: 20, fontWeight: FontWeight.bold, color: const Color(0xFF3E2723)));
+
   Widget _createProjectButton(bool canPropose) {
     return SizedBox(
       width: double.infinity,
       height: 56,
       child: ElevatedButton.icon(
-        icon: const Icon(Icons.add_circle_outline),
-        label: Text(canPropose ? "Propose a plan" : "Plan Already Submitted"),
+        icon: Icon(canPropose ? Icons.add_circle_outline : Icons.lock),
+        label: Text(canPropose ? "Propose a plan" : "Work in Progress"),
         style: ElevatedButton.styleFrom(
           backgroundColor: canPropose ? const Color(0xFF5D4037) : Colors.grey[400],
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
-        onPressed: canPropose ? _navigateToCreateProject : null,
+        onPressed: canPropose ? _navigateToCreateProject : () {
+           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Complete your ongoing work first.")));
+        },
       ),
     );
   }
 
   Widget _projectSection(Map<String, dynamic> project) {
     final String status = (project['status'] ?? 'pending').toString().toLowerCase();
-
-    Color statusColor;
-    Color bgColor;
-    IconData statusIcon;
-    String statusText = status.toUpperCase();
-
-    if (status == 'rejected') {
-      statusColor = Colors.red.shade800;
-      bgColor = Colors.red.shade50;
-      statusIcon = Icons.cancel_outlined;
-    } else if (status == 'approved' || status == 'ongoing') {
-      statusColor = Colors.green.shade700;
-      bgColor = Colors.green.shade50;
-      statusIcon = Icons.check_circle_rounded;
-    } else {
-      statusColor = Colors.orange.shade800;
-      bgColor = Colors.orange.shade50;
-      statusIcon = Icons.hourglass_empty_rounded;
-      statusText = 'PENDING';
-    }
-
+    Color statusColor = status == 'rejected' ? Colors.red : (status == 'approved' || status == 'ongoing' ? Colors.green : Colors.orange);
+    
     return InkWell(
       onTap: () => _handleProjectTap(project),
       child: Container(
@@ -347,69 +315,24 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: statusColor.withOpacity(0.3), width: 1),
-          boxShadow: [
-            BoxShadow(
-              color: statusColor.withOpacity(0.05),
-              blurRadius: 15,
-              offset: const Offset(0, 8),
-            )
-          ],
+          border: Border.all(color: statusColor.withOpacity(0.3)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Text(project['place'] ?? 'Unnamed Temple', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(status.toUpperCase(), style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12)),
+            const Divider(),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(8)),
-                  child: Row(
-                    children: [
-                      Icon(statusIcon, size: 14, color: statusColor),
-                      const SizedBox(width: 5),
-                      Text(statusText,
-                          style: GoogleFonts.poppins(
-                              fontSize: 11, fontWeight: FontWeight.bold, color: statusColor)),
-                    ],
-                  ),
-                ),
-                Text(
-                  project['projectId'] ?? '',
-                  style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey),
-                ),
+                const Text("View Details"),
+                if (status == 'pending' || status == 'rejected')
+                  IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => _deleteProject(project['id']))
+                else
+                  const Icon(Icons.arrow_forward_ios, size: 14),
               ],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              project['place'] ?? 'Unnamed Temple',
-              style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold, color: const Color(0xFF3E2723)),
-            ),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                const Icon(Icons.location_on, size: 14, color: Color(0xFF8D6E63)),
-                const SizedBox(width: 4),
-                Text(
-                  "${project['taluk']}, ${project['district']}",
-                  style: GoogleFonts.poppins(fontSize: 13, color: const Color(0xFF8D6E63)),
-                ),
-              ],
-            ),
-            const Divider(height: 30),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    'Click to view details',
-                    style: GoogleFonts.poppins(fontSize: 12, color: statusColor),
-                  ),
-                ),
-                const Icon(Icons.arrow_forward_ios, size: 14, color: Color(0xFF5D4037)),
-              ],
-            ),
+            )
           ],
         ),
       ),
@@ -452,23 +375,21 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             ),
           ),
           ListTile(
-            leading: const Icon(Icons.history_rounded),
-            title: const Text('Work History'),
+            leading: const Icon(Icons.history, color: Colors.blue),
+            title: const Text('Completed Projects'),
             onTap: () {
               Navigator.pop(context);
-              _navigateToHistory();
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const AllCompletedWorksScreen()));
             },
           ),
-          ListTile(
-            leading: const Icon(Icons.logout), 
-            title: const Text('Logout'), 
-            onTap: () async {
-              await _auth.signOut();
-              _redirectToSplash();
-            }
-          ),
+          ListTile(leading: const Icon(Icons.logout), title: const Text('Logout'), onTap: _logout),
         ],
       ),
     );
+  }
+
+  Future<void> _logout() async {
+    await _auth.signOut();
+    _redirectToSplash();
   }
 }

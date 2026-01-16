@@ -167,21 +167,6 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
       if (_selectedDate == null) return _showWarning('Please select a visit date');
       return true;
     }
-    
-    // FIX: Check if at least one structure is marked as "new"
-    if (_currentPage == 1) {
-      bool hasNew = _features.any((f) => f.condition == 'new');
-      if (!hasNew) {
-        return _showWarning('Please select at least one structure to be NEW to proceed.');
-      }
-      return true;
-    }
-
-    if (_currentPage == 2) {
-      if (_selectedImages.length < 5) return _showWarning('At least 5 site images are required');
-      if (_estimatedAmountController.text.isEmpty) return _showWarning('Estimated amount is required');
-    }
-
     return true; 
   }
 
@@ -272,6 +257,7 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
     );
   }
 
+  // --- LOCATION PAGE ---
   Widget _buildLocationPage() {
     return _buildFormContainer(
       child: Column(
@@ -299,6 +285,7 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
     );
   }
 
+  // --- DISTRICT AUTOCOMPLETE ---
   Widget _buildDistrictAutocomplete() {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -323,6 +310,7 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
     );
   }
 
+  // --- TALUK AUTOCOMPLETE ---
   Widget _buildTalukAutocomplete() {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -330,6 +318,7 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
         optionsBuilder: (TextEditingValue val) {
           final selectedDistrict = _districtController.text;
           if (selectedDistrict.isEmpty || val.text.isEmpty) return const Iterable<String>.empty();
+          
           final taluks = _districtTaluks[selectedDistrict] ?? [];
           return taluks.where((t) => t.toLowerCase().startsWith(val.text.toLowerCase()));
         },
@@ -337,18 +326,18 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
           setState(() => _talukController.text = selection);
         },
         fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-          // FIX: Persistence logic - restore value if already present in controller
-          if (controller.text.isEmpty && _talukController.text.isNotEmpty) {
-            controller.text = _talukController.text;
-          }
+          if (_talukController.text.isEmpty) controller.clear();
           
+          // isClickable logic: The field looks normal but won't allow typing if district is empty
           bool canInput = _districtController.text.isNotEmpty;
+
           return _buildStyledTextField(
             controller, 
             focusNode, 
             'Taluk', 
             onFieldSubmitted,
             enabled: canInput,
+            // Keep background white even if disabled
             isTalukField: true, 
             hint: canInput ? 'Type to search Taluk' : 'Select District First'
           );
@@ -368,15 +357,26 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
         labelText: label,
         hintText: hint,
         filled: true,
+        // Ensure background is white for both enabled and specific disabled taluk field
         fillColor: (enabled || isTalukField) ? Colors.white : Colors.grey.shade100,
-        disabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFF5E6CA))),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFF5E6CA))),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF5D4037))),
+        disabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10), 
+          borderSide: const BorderSide(color: Color(0xFFF5E6CA))
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10), 
+          borderSide: const BorderSide(color: Color(0xFFF5E6CA))
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10), 
+          borderSide: const BorderSide(color: Color(0xFF5D4037))
+        ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
     );
   }
 
+  // --- OTHER UI HELPERS ---
   Widget _buildHeader() {
     return Padding(
       padding: const EdgeInsets.only(top: 20, bottom: 10),
@@ -425,6 +425,7 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
     );
   }
 
+  // --- FEATURES & CONTACT PAGES ---
   Widget _buildFeaturePage() {
     return _buildFormContainer(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [_title('Select Features', 'Set condition for each structure'), const SizedBox(height: 16), ..._features.map(_buildFeatureCard)]));
   }
@@ -470,25 +471,9 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
   }
 
   Widget _buildContactPage() {
-    return _buildFormContainer(child: Column(children: [
-      _title('Contact Details', 'Contractor Information'),
-      const SizedBox(height: 16),
-      _plainTextField(_contactNameController, 'Contact Name', readOnly: true),
-      _plainTextField(_contactPhoneController, 'Phone Number', readOnly: true),
-      _plainTextField(TextEditingController(text: _aadharNumber), 'Aadhar Number', readOnly: true),
-      _plainTextField(_estimatedAmountController, 'Total Estimated Cost', keyboard: TextInputType.number),
-      const SizedBox(height: 20),
-      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text('Site Photos', style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold)),
-        Text('(At least 5 required)', style: GoogleFonts.poppins(fontSize: 12, color: Colors.red, fontWeight: FontWeight.w500))
-      ]),
-      const SizedBox(height: 12),
-      // Updated Widget call to support both Camera and Gallery
-      ImagePickerWidget(
-        maxImages: 10, 
-        onImagesSelected: (imgs) => setState(() => _selectedImages = imgs)
-      )
-    ]));
+    return _buildFormContainer(child: Column(children: [_title('Contact Details', 'Contractor Information'), const SizedBox(height: 16), _plainTextField(_contactNameController, 'Contact Name', readOnly: true), _plainTextField(_contactPhoneController, 'Phone Number', readOnly: true), _plainTextField(TextEditingController(text: _aadharNumber), 'Aadhar Number', readOnly: true), _plainTextField(_estimatedAmountController, 'Total Estimated Cost', keyboard: TextInputType.number), const SizedBox(height: 20),
+      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text('Site Photos', style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold)), Text('(At least 5 required)', style: GoogleFonts.poppins(fontSize: 12, color: Colors.red, fontWeight: FontWeight.w500))]),
+      const SizedBox(height: 12), ImagePickerWidget(maxImages: 10, onImagesSelected: (imgs) => setState(() => _selectedImages = imgs))]));
   }
 
   Widget _buildNavigationButtons() {

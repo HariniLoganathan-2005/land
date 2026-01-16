@@ -8,7 +8,7 @@ import '../screens/profile_screen.dart';
 import 'splash_screen.dart';
 import '../screens/project_overview_screen.dart';
 import '../screens/user_completed_project_screen.dart';
-import '../screens/all_completed_works_screen.dart'; 
+import '../screens/all_completed_works_screen.dart'; // Import for the history page
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
@@ -68,6 +68,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     );
   }
 
+  // Navigate to the separate completed projects section (The Top Right Icon)
   void _navigateToHistory() {
     Navigator.push(
       context,
@@ -167,7 +168,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       const SizedBox(height: 26),
                       _projectHeader(),
                       const SizedBox(height: 14),
-                      _buildProjectLogicSection(),
+                      _buildProjectLogicSection(), 
+                      // Removed the completed works list from here as requested
                       const SizedBox(height: 80),
                     ],
                   ),
@@ -216,10 +218,19 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               ],
             ),
           ]),
-          // Only the Menu Icon remains here
-          IconButton(
-            onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-            icon: const Icon(Icons.menu, color: Color(0xFF5D4037)),
+          Row(
+            children: [
+              // HISTORY ICON: THE SEPARATE PART FOR COMPLETED PROJECTS
+              IconButton(
+                onPressed: _navigateToHistory,
+                icon: const Icon(Icons.history_edu_rounded, color: Color(0xFF5D4037), size: 28),
+                tooltip: 'View Completed Works',
+              ),
+              IconButton(
+                onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                icon: const Icon(Icons.menu, color: Color(0xFF5D4037)),
+              ),
+            ],
           ),
         ],
       ),
@@ -264,6 +275,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           return const Center(child: CircularProgressIndicator());
         }
 
+        // Logic: Exclude 'completed' projects from the Home Screen
         final activeDocs = snapshot.data?.docs.where((doc) {
               final status = (doc['status'] ?? '').toString().toLowerCase();
               return status != 'completed';
