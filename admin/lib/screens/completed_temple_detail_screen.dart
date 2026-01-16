@@ -31,6 +31,7 @@ class _CompletedTempleDetailScreenState
   List<Map<String, dynamic>> works = [];
   List<Map<String, dynamic>> transactions = [];
   List<Map<String, dynamic>> bills = [];
+
   bool loadingWorks = true;
   bool loadingTransactions = true;
   bool loadingBills = true;
@@ -53,23 +54,39 @@ class _CompletedTempleDetailScreenState
   String _fmtDate(dynamic v) {
     final d = _toDate(v);
     if (d == null) return '';
-    return '${d.day.toString().padLeft(2, '0')}-${d.month.toString().padLeft(2, '0')}-${d.year}';
+    return '${d.day.toString().padLeft(2, '0')}-'
+        '${d.month.toString().padLeft(2, '0')}-'
+        '${d.year}';
   }
 
   @override
   void initState() {
     super.initState();
     temple = Map<String, dynamic>.from(widget.temple);
-    projectId = (temple['projectId'] ?? temple['id'] ?? '').toString();
-    _loadWorks();          // now from project_tasks
+
+    // IMPORTANT: only use projectId that was set in TempleDetailScreen
+    projectId = (temple['projectId'] ?? '').toString();
+
+    _loadWorks();
     _loadTransactions();
     _loadBills();
   }
 
-  /// LOAD COMPLETED ACTIVITIES FROM project_tasks
+  /// Load completed activities from `project_tasks`
   Future<void> _loadWorks() async {
+    if (projectId.isEmpty) {
+      debugPrint('LOAD WORKS: projectId is EMPTY');
+      setState(() {
+        loadingWorks = false;
+        works = [];
+      });
+      return;
+    }
+
     setState(() => loadingWorks = true);
     try {
+      debugPrint('LOAD WORKS for projectId = $projectId');
+
       final snap = await _firestore
           .collection('project_tasks')
           .where('projectId', isEqualTo: projectId)
@@ -77,9 +94,11 @@ class _CompletedTempleDetailScreenState
           .orderBy('completedAt', descending: true)
           .get();
 
+      debugPrint('LOAD WORKS: found ${snap.docs.length} docs');
+
       works = snap.docs.map<Map<String, dynamic>>((d) {
         final data = d.data();
-        return <String, dynamic>{
+        return {
           'id': d.id,
           'name': data['taskName'] ?? '',
           'description': data['description'] ?? '',
@@ -89,10 +108,9 @@ class _CompletedTempleDetailScreenState
           'date': data['completedAt'] ??
               data['startedAt'] ??
               data['createdAt'],
-          'imageUrls': (data['endImages'] as List?)
-                  ?.map((e) => e.toString())
-                  .toList() ??
-              <String>[],
+          'imageUrls': (data['endImages'] as List? ?? [])
+              .map((e) => e.toString())
+              .toList(),
         };
       }).toList();
     } catch (e) {
@@ -104,15 +122,24 @@ class _CompletedTempleDetailScreenState
   }
 
   Future<void> _loadTransactions() async {
+    if (projectId.isEmpty) {
+      setState(() {
+        loadingTransactions = false;
+        transactions = [];
+      });
+      return;
+    }
+
     setState(() => loadingTransactions = true);
     try {
       final snap = await _firestore
           .collection('transactions')
           .where('projectId', isEqualTo: projectId)
           .get();
+
       transactions = snap.docs.map<Map<String, dynamic>>((d) {
         final data = d.data();
-        return <String, dynamic>{
+        return {
           'id': d.id,
           'amount': _n(data['amount']),
           'description': data['description'] ?? '',
@@ -121,6 +148,7 @@ class _CompletedTempleDetailScreenState
           'transactionId': data['transactionId'] ?? '',
         };
       }).toList();
+
       transactions.sort((a, b) {
         final da = _toDate(a['date']) ?? DateTime(1970);
         final db = _toDate(b['date']) ?? DateTime(1970);
@@ -135,25 +163,34 @@ class _CompletedTempleDetailScreenState
   }
 
   Future<void> _loadBills() async {
+    if (projectId.isEmpty) {
+      setState(() {
+        loadingBills = false;
+        bills = [];
+      });
+      return;
+    }
+
     setState(() => loadingBills = true);
     try {
       final snap = await _firestore
           .collection('bills')
           .where('projectId', isEqualTo: projectId)
           .get();
+
       bills = snap.docs.map<Map<String, dynamic>>((d) {
         final data = d.data();
-        return <String, dynamic>{
+        return {
           'id': d.id,
           'title': data['title'] ?? '',
           'amount': _n(data['amount']),
           'createdAt': data['createdAt'],
-          'imageUrls': (data['imageUrls'] as List?)
-                  ?.map((e) => e.toString())
-                  .toList() ??
-              <String>[],
+          'imageUrls': (data['imageUrls'] as List? ?? [])
+              .map((e) => e.toString())
+              .toList(),
         };
       }).toList();
+
       bills.sort((a, b) {
         final da = _toDate(a['createdAt']) ?? DateTime(1970);
         final db = _toDate(b['createdAt']) ?? DateTime(1970);
@@ -191,9 +228,10 @@ class _CompletedTempleDetailScreenState
     final String completedDate = temple['completedDate'] == null
         ? 'N/A'
         : _fmtDate(temple['completedDate']);
+
     final List<String> siteImages =
-        (temple['imageUrls'] as List?)?.map((e) => e.toString()).toList() ??
-            <String>[];
+        (temple['imageUrls'] as List? ?? []).map((e) => e.toString()).toList();
+
     final num totalDonated = _n(temple['donatedAmount']);
     final num totalBillsAmount = _n(temple['totalBillsAmount']);
     final num totalTransactionsAmount = _n(temple['totalTransactionsAmount']);
@@ -215,7 +253,8 @@ class _CompletedTempleDetailScreenState
                 children: [
                   Card(
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     child: ListTile(
                       title: const Text('Project Completed'),
                       subtitle: Text('Completed on: $completedDate'),
@@ -427,12 +466,14 @@ class _CompletedTempleDetailScreenState
             ),
             const SizedBox(height: 8),
             if (works.isEmpty)
-              const Text('No works recorded.',
-                  style: TextStyle(color: Colors.grey))
+              const Text(
+                'No works recorded.',
+                style: TextStyle(color: Colors.grey),
+              )
             else
               ...works.map((w) {
                 final images =
-                    (w['imageUrls'] as List?)?.cast<String>() ?? <String>[];
+                    (w['imageUrls'] as List? ?? []).cast<String>();
                 return Container(
                   margin: const EdgeInsets.only(bottom: 10),
                   padding: const EdgeInsets.all(8),
@@ -452,8 +493,6 @@ class _CompletedTempleDetailScreenState
                       if (_fmtDate(w['date']).isNotEmpty)
                         Text('Date: ${_fmtDate(w['date'])}'),
                       Text('Status: ${_s(w['status']).toUpperCase()}'),
-                      Text('People visited: ${_n(w['peopleVisited'])}'),
-                      Text('Amount donated: ₹${_n(w['amountDonated'])}'),
                       if (images.isNotEmpty) ...[
                         const SizedBox(height: 6),
                         SizedBox(
@@ -487,7 +526,7 @@ class _CompletedTempleDetailScreenState
                     ],
                   ),
                 );
-              }),
+              }).toList(),
           ],
         ),
       ),
@@ -517,8 +556,10 @@ class _CompletedTempleDetailScreenState
             ),
             const SizedBox(height: 8),
             if (transactions.isEmpty)
-              const Text('No transactions recorded.',
-                  style: TextStyle(color: Colors.grey))
+              const Text(
+                'No transactions recorded.',
+                style: TextStyle(color: Colors.grey),
+              )
             else
               ...transactions.map((t) {
                 return Container(
@@ -545,7 +586,7 @@ class _CompletedTempleDetailScreenState
                     ],
                   ),
                 );
-              }),
+              }).toList(),
           ],
         ),
       ),
@@ -575,12 +616,14 @@ class _CompletedTempleDetailScreenState
             ),
             const SizedBox(height: 8),
             if (bills.isEmpty)
-              const Text('No bills uploaded.',
-                  style: TextStyle(color: Colors.grey))
+              const Text(
+                'No bills uploaded.',
+                style: TextStyle(color: Colors.grey),
+              )
             else
               ...bills.map((b) {
                 final images =
-                    (b['imageUrls'] as List?)?.cast<String>() ?? <String>[];
+                    (b['imageUrls'] as List? ?? []).cast<String>();
                 return Container(
                   margin: const EdgeInsets.only(bottom: 10),
                   padding: const EdgeInsets.all(8),
@@ -592,8 +635,11 @@ class _CompletedTempleDetailScreenState
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        _s(b['title']).isEmpty ? 'Bill' : _s(b['title']),
-                        style: const TextStyle(fontWeight: FontWeight.w600),
+                        _s(b['title']).isEmpty
+                            ? 'Bill'
+                            : _s(b['title']),
+                        style:
+                            const TextStyle(fontWeight: FontWeight.w600),
                       ),
                       Text('Amount: ₹${_n(b['amount'])}'),
                       if (_fmtDate(b['createdAt']).isNotEmpty)
@@ -631,7 +677,7 @@ class _CompletedTempleDetailScreenState
                     ],
                   ),
                 );
-              }),
+              }).toList(),
           ],
         ),
       ),
@@ -651,7 +697,9 @@ class _CompletedTempleDetailScreenState
             child: Text(
               label,
               style: const TextStyle(
-                  fontWeight: FontWeight.w500, color: Colors.brown),
+                fontWeight: FontWeight.w500,
+                color: Colors.brown,
+              ),
             ),
           ),
           Expanded(
