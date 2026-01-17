@@ -3,12 +3,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../screens/create_project_screen.dart';
-import '../screens/profile_screen.dart';
-import 'splash_screen.dart';
-import '../screens/project_overview_screen.dart';
-import '../screens/user_completed_project_screen.dart';
-import '../screens/all_completed_works_screen.dart';
+import 'screens/create_project_screen.dart';
+import 'screens/profile_screen.dart';
+import 'screens/splash_screen.dart'; // Fixed import path
+import 'screens/project_overview_screen.dart';
+import 'screens/user_completed_project_screen.dart';
+import 'screens/all_completed_works_screen.dart';
+import 'screens/rejected_proposals_screen.dart'; // Added this import
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
@@ -56,7 +57,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     if (!mounted) return;
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (_) => const SplashScreen()),
+      MaterialPageRoute(builder: (_) => SplashScreen()),
       (route) => false,
     );
   }
@@ -64,30 +65,33 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   void _navigateToCreateProject() async {
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const CreateProjectScreen()),
+      MaterialPageRoute(builder: (context) => CreateProjectScreen()),
     );
   }
 
   void _navigateToHistory() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const AllCompletedWorksScreen()),
+      MaterialPageRoute(builder: (_) => AllCompletedWorksScreen()),
     );
   }
 
-  // New function to handle moving rejected projects to the drawer section
   Future<void> _archiveRejectedProject(String docId) async {
     try {
       await _firestore.collection('projects').doc(docId).update({
         'status': 'archived_rejected',
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Project moved to Rejected History')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Project moved to Rejected History')),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
     }
   }
 
@@ -283,33 +287,30 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
         final allDocs = snapshot.data?.docs ?? [];
 
-        // Logic: Project is "active" if it is NOT completed AND NOT archived
         final activeDocs = allDocs.where((doc) {
           final status = (doc['status'] ?? '').toString().toLowerCase();
           return status != 'completed' && status != 'archived_rejected';
         }).toList();
 
-        // Check specifically for Pending/Ongoing to disable proposal button
         final bool hasLockedProject = activeDocs.any((doc) {
           final s = doc['status'].toString().toLowerCase();
           return s == 'pending' || s == 'approved' || s == 'ongoing';
         });
 
-        // Rejected projects show in list but DON'T lock the "Propose" button
         final bool canPropose = !hasLockedProject;
-
-        Map<String, dynamic>? projectData;
-        if (activeDocs.isNotEmpty) {
-          final doc = activeDocs.first;
-          projectData = {'id': doc.id, 'projectId': doc.id, ...doc.data() as Map<String, dynamic>};
-        }
 
         return Column(
           children: [
             _createProjectButton(canPropose),
             const SizedBox(height: 18),
             if (activeDocs.isNotEmpty)
-              _projectSection(projectData!)
+              ...activeDocs.map((doc) {
+                final projectData = {'id': doc.id, 'projectId': doc.id, ...doc.data() as Map<String, dynamic>};
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 16.0),
+                  child: _projectSection(projectData),
+                );
+              }).toList()
             else
               const Center(
                 child: Padding(
@@ -394,7 +395,27 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                     ],
                   ),
                 ),
-                // Delete/Archive Icon for Rejected projects
+                // Project ID on the right side
+                Text(
+                  project['projectId']?.toString().toUpperCase() ?? '',
+                  style: GoogleFonts.poppins(
+                    fontSize: 12, 
+                    fontWeight: FontWeight.w600, 
+                    color: Colors.grey[600]
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    project['place'] ?? 'Unnamed Temple',
+                    style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold, color: const Color(0xFF3E2723)),
+                  ),
+                ),
                 if (status == 'rejected')
                   IconButton(
                     constraints: const BoxConstraints(),
@@ -402,17 +423,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                     icon: const Icon(Icons.delete_outline, color: Colors.red),
                     onPressed: () => _showRejectedDialog(project['id']),
                   )
-                else
-                  Text(
-                    project['projectId'] ?? '',
-                    style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey),
-                  ),
               ],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              project['place'] ?? 'Unnamed Temple',
-              style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold, color: const Color(0xFF3E2723)),
             ),
             const SizedBox(height: 4),
             Row(
@@ -459,7 +470,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   }
 
   Future<void> _openProfile() async {
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen()));
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => ProfileScreen()));
     _loadUserData();
     setState(() => _currentIndex = 0);
   }
@@ -485,14 +496,15 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               _navigateToHistory();
             },
           ),
-          // NEW SECTION: Rejected History
           ListTile(
             leading: const Icon(Icons.report_gmailerrorred_rounded, color: Colors.red),
             title: const Text('Rejected Proposals'),
             onTap: () {
               Navigator.pop(context);
-              // Navigate to a screen filtered by status: 'archived_rejected'
-              // For brevity, assuming you might create a generic history screen
+              Navigator.push(
+                context, 
+                MaterialPageRoute(builder: (context) => RejectedProposalsScreen())
+              );
             },
           ),
           const Divider(),

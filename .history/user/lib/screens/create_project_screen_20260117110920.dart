@@ -6,6 +6,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:geocoding/geocoding.dart';
 
 import '../widgets/image_picker_widget.dart';
 import '../services/cloudinary_service.dart';
@@ -18,12 +20,12 @@ class CreateProjectScreen extends StatefulWidget {
 }
 
 class FeatureEntry {
-  final String key;
-  final String label;
-  String condition;
-  String? dimension;
-  String? amount;
-  String? customSize;
+  final String key; 
+  final String label; 
+  String condition; 
+  String? dimension; 
+  String? amount; 
+  String? customSize; 
 
   FeatureEntry({
     required this.key,
@@ -173,21 +175,6 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
       if (!hasNew) {
         return _showWarning('Please select at least one structure to be NEW to proceed.');
       }
-
-      // FIX: Check if every "new" feature has a dimension and amount selected
-      for (var feature in _features) {
-        if (feature.condition == 'new') {
-          if (feature.dimension == null) {
-            return _showWarning('Please select a size for ${feature.label}');
-          }
-          if (feature.dimension == 'custom' && (feature.customSize == null || feature.customSize!.trim().isEmpty)) {
-            return _showWarning('Please enter custom size for ${feature.label}');
-          }
-          if (feature.amount == null || feature.amount!.trim().isEmpty) {
-            return _showWarning('Please ensure estimate amount is set for ${feature.label}');
-          }
-        }
-      }
       return true;
     }
 
@@ -207,42 +194,75 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
     return false;
   }
 
-  Future<void> _detectAndFillLocation() async {
+  // --- LOCATION FETCHING LOGIC ---
+  Future<void> _handleLocationTap() async {
     setState(() => _isLoading = true);
     try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        setState(() => _isLoading = false);
-        _showWarning("Location services are disabled. Please enable GPS.");
-        await Geolocator.openLocationSettings();
-        return;
-      }
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) {
-          setState(() => _isLoading = false);
-          _showWarning("Location permissions are denied.");
-          return;
-        }
       }
-      if (permission == LocationPermission.deniedForever) {
-        setState(() => _isLoading = false);
-        _showWarning("Location permissions are permanently denied. Open settings to allow.");
-        await Geolocator.openAppSettings();
-        return;
+
+      if (permission == LocationPermission.whileInUse || permission == LocationPermission.always) {
+        final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+        _openMapPicker(position.latitude, position.longitude);
+      } else {
+        _showWarning("Location permission is required.");
       }
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.best,
-        timeLimit: const Duration(seconds: 15),
-      );
-      setState(() {
-        _mapLocationController.text = "${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}";
-      });
     } catch (e) {
-      _showWarning("Timeout or Error fetching location. Try again.");
+      _showWarning("GPS Error: $e");
     } finally {
       setState(() => _isLoading = false);
+    }
+  }
+
+  // --- OLA/UBER STYLE MAP PICKER ---
+  void _openMapPicker(double lat, double lng) async {
+    LatLng? pickedLocation = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => Scaffold(
+          appBar: AppBar(title: const Text("Select Location"), backgroundColor: const Color(0xFF5D4037)),
+          body: Stack(
+            children: [
+              GoogleMap(
+                initialCameraPosition: CameraPosition(target: LatLng(lat, lng), zoom: 15),
+                onTap: (pos) => Navigator.pop(context, pos),
+                myLocationEnabled: true,
+              ),
+              const Center(child: Icon(Icons.location_pin, size: 50, color: Colors.red)),
+              Positioned(
+                bottom: 20,
+                left: 20,
+                right: 20,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D4037)),
+                  onPressed: () {
+                    // Logic to get center of map would go here, for simplicity we use tap
+                    _showWarning("Tap on the map to pin location");
+                  },
+                  child: const Text("Tap Map to Confirm", style: TextStyle(color: Colors.white)),
+                ),
+              )
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (pickedLocation != null) {
+      setState(() {
+        _mapLocationController.text = "${pickedLocation.latitude.toStringAsFixed(6)}, ${pickedLocation.longitude.toStringAsFixed(6)}";
+      });
+      // Reverse Geocoding to get Place name if empty
+      try {
+        List<Placemark> placemarks = await placemarkFromCoordinates(pickedLocation.latitude, pickedLocation.longitude);
+        if (placemarks.isNotEmpty && _placeController.text.isEmpty) {
+          setState(() {
+            _placeController.text = placemarks.first.name ?? "";
+          });
+        }
+      } catch (_) {}
     }
   }
 
@@ -328,12 +348,7 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
               Container(
                 margin: const EdgeInsets.only(bottom: 12),
                 decoration: BoxDecoration(color: const Color(0xFF5D4037), borderRadius: BorderRadius.circular(10)),
-                child: IconButton(
-                  icon: _isLoading 
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Icon(Icons.my_location, color: Colors.white), 
-                  onPressed: _isLoading ? null : _detectAndFillLocation
-                ),
+                child: IconButton(icon: const Icon(Icons.map, color: Colors.white), onPressed: _handleLocationTap),
               ),
             ],
           ),
@@ -404,6 +419,7 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
       controller: controller,
       focusNode: focusNode,
       enabled: enabled,
+      textCapitalization: TextCapitalization.sentences,
       onFieldSubmitted: (v) => onSubmitted(),
       style: TextStyle(color: enabled ? Colors.black : Colors.black54),
       decoration: InputDecoration(
@@ -450,7 +466,10 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: TextFormField(
-        controller: c, keyboardType: keyboard, readOnly: readOnly,
+        controller: c, 
+        keyboardType: keyboard, 
+        readOnly: readOnly,
+        textCapitalization: TextCapitalization.sentences,
         decoration: InputDecoration(
           labelText: label, filled: true, fillColor: readOnly ? Colors.grey.shade100 : Colors.white,
           enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFF5E6CA))),
@@ -491,7 +510,10 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
           _buildFeatureDimensionTile(entry: entry, value: 'custom', title: 'Other', subtitle: 'Custom Size & Amount', onSelected: () { setState(() { entry.dimension = 'custom'; }); }),
           if (entry.dimension == 'custom') ...[
             const SizedBox(height: 8),
-            TextField(decoration: const InputDecoration(labelText: 'Size (e.g. 5 ft)', border: OutlineInputBorder()), onChanged: (v) => entry.customSize = v),
+            TextField(
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(labelText: 'Size (e.g. 5 ft)', border: OutlineInputBorder()), 
+              onChanged: (v) => entry.customSize = v),
             const SizedBox(height: 8),
             TextField(decoration: const InputDecoration(labelText: 'Required Amount (Rs)', border: OutlineInputBorder()), keyboardType: TextInputType.number, onChanged: (v) => entry.amount = v),
           ]

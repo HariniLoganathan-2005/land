@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart'; // New import for address
 
 import '../widgets/image_picker_widget.dart';
 import '../services/cloudinary_service.dart';
@@ -49,16 +50,13 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
   int _currentPage = 0;
 
   final TextEditingController _placeController = TextEditingController();
-  final TextEditingController _nearbyTownController = TextEditingController();
   final TextEditingController _talukController = TextEditingController();
   final TextEditingController _districtController = TextEditingController();
-  final TextEditingController _stateController =
-      TextEditingController(text: "Tamil Nadu");
+  final TextEditingController _stateController = TextEditingController(text: "Tamil Nadu");
   final TextEditingController _mapLocationController = TextEditingController();
   final TextEditingController _contactNameController = TextEditingController();
   final TextEditingController _contactPhoneController = TextEditingController();
-  final TextEditingController _estimatedAmountController =
-      TextEditingController();
+  final TextEditingController _estimatedAmountController = TextEditingController();
 
   DateTime? _selectedDate;
   List<String> _selectedImages = [];
@@ -124,7 +122,6 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
   };
 
   late List<FeatureEntry> _features;
-  FeatureEntry? _selectedFeatureEntry;
 
   @override
   void initState() {
@@ -158,96 +155,86 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
     }
   }
 
-  bool _validateCurrentPage() {
-    if (_currentPage == 0) {
-      if (_placeController.text.trim().isEmpty) return _showWarning('Place name is required');
-      if (_districtController.text.trim().isEmpty) return _showWarning('District is required');
-      if (_talukController.text.trim().isEmpty) return _showWarning('Taluk is required');
-      if (_mapLocationController.text.trim().isEmpty) return _showWarning('Please capture GPS coordinates');
-      if (_selectedDate == null) return _showWarning('Please select a visit date');
-      return true;
-    }
-    
-    if (_currentPage == 1) {
-      bool hasNew = _features.any((f) => f.condition == 'new');
-      if (!hasNew) {
-        return _showWarning('Please select at least one structure to be NEW to proceed.');
-      }
-
-      // FIX: Check if every "new" feature has a dimension and amount selected
-      for (var feature in _features) {
-        if (feature.condition == 'new') {
-          if (feature.dimension == null) {
-            return _showWarning('Please select a size for ${feature.label}');
-          }
-          if (feature.dimension == 'custom' && (feature.customSize == null || feature.customSize!.trim().isEmpty)) {
-            return _showWarning('Please enter custom size for ${feature.label}');
-          }
-          if (feature.amount == null || feature.amount!.trim().isEmpty) {
-            return _showWarning('Please ensure estimate amount is set for ${feature.label}');
-          }
-        }
-      }
-      return true;
-    }
-
-    if (_currentPage == 2) {
-      if (_selectedImages.length < 5) return _showWarning('At least 5 site images are required');
-      if (_estimatedAmountController.text.isEmpty) return _showWarning('Estimated amount is required');
-    }
-
-    return true; 
-  }
-
-  bool _showWarning(String msg) {
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: const Color(0xFFB71C1C), behavior: SnackBarBehavior.floating),
-    );
-    return false;
-  }
-
+  /// REVERSE GEOCODING (Converts GPS to Address like Ola)
   Future<void> _detectAndFillLocation() async {
     setState(() => _isLoading = true);
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        setState(() => _isLoading = false);
-        _showWarning("Location services are disabled. Please enable GPS.");
-        await Geolocator.openLocationSettings();
+        _showWarning("GPS is disabled. Please turn it on.");
         return;
       }
+
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
-          setState(() => _isLoading = false);
-          _showWarning("Location permissions are denied.");
+          _showWarning("Location permission denied.");
           return;
         }
       }
-      if (permission == LocationPermission.deniedForever) {
-        setState(() => _isLoading = false);
-        _showWarning("Location permissions are permanently denied. Open settings to allow.");
-        await Geolocator.openAppSettings();
-        return;
+
+      Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.best);
+
+      // --- REVERSE GEOCODING START ---
+      List<Placemark> placemarks = await placemarkFromCoordinates(position.latitude, position.longitude);
+      
+      if (placemarks.isNotEmpty) {
+        Placemark place = placemarks[0];
+        // Formatting address like Ola/Uber
+        String fullAddress = "${place.name}, ${place.street}, ${place.subLocality}, ${place.locality}, ${place.administrativeArea} ${place.postalCode}, ${place.country}";
+        
+        // Clean up double commas if any fields are empty
+        fullAddress = fullAddress.replaceAll(RegExp(r', ,'), ',').trim();
+
+        setState(() {
+          _mapLocationController.text = fullAddress;
+          _placeController.text = place.street ?? "";
+          // Auto-fill District/Taluk if recognized
+          if (place.subAdministrativeArea != null && _tnDistricts.contains(place.subAdministrativeArea)) {
+            _districtController.text = place.subAdministrativeArea!;
+          }
+        });
+      } else {
+        setState(() {
+          _mapLocationController.text = "${position.latitude}, ${position.longitude}";
+        });
       }
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.best,
-        timeLimit: const Duration(seconds: 15),
-      );
-      setState(() {
-        _mapLocationController.text = "${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}";
-      });
     } catch (e) {
-      _showWarning("Timeout or Error fetching location. Try again.");
+      _showWarning("Could not fetch address. Try again.");
     } finally {
       setState(() => _isLoading = false);
     }
   }
 
+  bool _validateCurrentPage() {
+    if (_currentPage == 0) {
+      if (_placeController.text.trim().isEmpty) return _showWarning('Place name is required');
+      if (_districtController.text.trim().isEmpty) return _showWarning('District is required');
+      if (_talukController.text.trim().isEmpty) return _showWarning('Taluk is required');
+      if (_mapLocationController.text.trim().isEmpty) return _showWarning('Please capture location');
+      if (_selectedDate == null) return _showWarning('Please select a visit date');
+      return true;
+    }
+    if (_currentPage == 1) {
+      bool hasNew = _features.any((f) => f.condition == 'new');
+      if (!hasNew) return _showWarning('Select at least one NEW structure.');
+      return true;
+    }
+    if (_currentPage == 2) {
+      if (_selectedImages.length < 5) return _showWarning('At least 5 images required');
+      if (_estimatedAmountController.text.isEmpty) return _showWarning('Total cost required');
+    }
+    return true;
+  }
+
+  bool _showWarning(String msg) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: const Color(0xFFB71C1C), behavior: SnackBarBehavior.floating));
+    return false;
+  }
+
   Future<void> _createProject() async {
-    if (!_validateCurrentPage()) return;
     setState(() => _isLoading = true);
     try {
       final user = FirebaseAuth.instance.currentUser!;
@@ -314,34 +301,50 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
   Widget _buildLocationPage() {
     return _buildFormContainer(
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _title('Location Info', 'Enter details of the site'),
+          _title('Location Info', 'Tag the site address'),
           const SizedBox(height: 16),
-          _plainTextField(_placeController, 'Place'),
+          
+          // OLA STYLE LOCATION SELECTOR
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFF5E6CA)),
+            ),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.my_location, color: Colors.blue),
+                  title: const Text("Current Location", style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text("Tap to fetch automatically"),
+                  onTap: _detectAndFillLocation,
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.map_outlined, color: Colors.green),
+                  title: const Text("Locate on Map"),
+                  subtitle: const Text("Point to manual location"),
+                  onTap: () { /* Logic for Google Maps Picker could go here */ },
+                ),
+              ],
+            ),
+          ),
+          
+          const SizedBox(height: 16),
+          _plainTextField(_mapLocationController, 'Selected Address', maxLines: 3, readOnly: true),
+          _plainTextField(_placeController, 'Specific Landmark/Place Name'),
           _buildDistrictAutocomplete(),
           _buildTalukAutocomplete(),
-          _plainTextField(_stateController, 'State', readOnly: true),
-          Row(
-            children: [
-              Expanded(child: _plainTextField(_mapLocationController, 'Map Location', readOnly: true)),
-              const SizedBox(width: 8),
-              Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(color: const Color(0xFF5D4037), borderRadius: BorderRadius.circular(10)),
-                child: IconButton(
-                  icon: _isLoading 
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Icon(Icons.my_location, color: Colors.white), 
-                  onPressed: _isLoading ? null : _detectAndFillLocation
-                ),
-              ),
-            ],
-          ),
           InkWell(onTap: () => _selectDate(context), child: _dateField()),
         ],
       ),
     );
   }
+
+  // --- REUSED UI COMPONENTS ---
 
   Widget _buildDistrictAutocomplete() {
     return Padding(
@@ -377,41 +380,22 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
           final taluks = _districtTaluks[selectedDistrict] ?? [];
           return taluks.where((t) => t.toLowerCase().startsWith(val.text.toLowerCase()));
         },
-        onSelected: (String selection) {
-          setState(() => _talukController.text = selection);
-        },
+        onSelected: (String selection) => setState(() => _talukController.text = selection),
         fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
           if (controller.text.isEmpty && _talukController.text.isNotEmpty) {
             controller.text = _talukController.text;
           }
-          bool canInput = _districtController.text.isNotEmpty;
-          return _buildStyledTextField(
-            controller, 
-            focusNode, 
-            'Taluk', 
-            onFieldSubmitted,
-            enabled: canInput,
-            isTalukField: true, 
-            hint: canInput ? 'Type to search Taluk' : 'Select District First'
-          );
+          return _buildStyledTextField(controller, focusNode, 'Taluk', onFieldSubmitted, enabled: _districtController.text.isNotEmpty);
         },
       ),
     );
   }
 
-  Widget _buildStyledTextField(TextEditingController controller, FocusNode focusNode, String label, VoidCallback onSubmitted, {bool enabled = true, String? hint, bool isTalukField = false}) {
+  Widget _buildStyledTextField(TextEditingController controller, FocusNode focusNode, String label, VoidCallback onSubmitted, {bool enabled = true}) {
     return TextFormField(
-      controller: controller,
-      focusNode: focusNode,
-      enabled: enabled,
-      onFieldSubmitted: (v) => onSubmitted(),
-      style: TextStyle(color: enabled ? Colors.black : Colors.black54),
+      controller: controller, focusNode: focusNode, enabled: enabled,
       decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        filled: true,
-        fillColor: (enabled || isTalukField) ? Colors.white : Colors.grey.shade100,
-        disabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFF5E6CA))),
+        labelText: label, filled: true, fillColor: enabled ? Colors.white : Colors.grey.shade100,
         enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFF5E6CA))),
         focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF5D4037))),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -419,19 +403,9 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
     );
   }
 
-  Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.only(top: 20, bottom: 10),
-      child: Text('Propose a Plan', style: GoogleFonts.cinzel(fontSize: 24, fontWeight: FontWeight.bold, color: const Color(0xFF3E2723))),
-    );
-  }
+  Widget _buildHeader() => Padding(padding: const EdgeInsets.only(top: 20, bottom: 10), child: Text('Propose a Plan', style: GoogleFonts.cinzel(fontSize: 24, fontWeight: FontWeight.bold, color: const Color(0xFF3E2723))));
 
-  Widget _buildProgressIndicator() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 10),
-      child: Row(children: [_step(0, 'Location'), _line(0), _step(1, 'Feature'), _line(1), _step(2, 'Details')]),
-    );
-  }
+  Widget _buildProgressIndicator() => Padding(padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 10), child: Row(children: [_step(0, 'Location'), _line(0), _step(1, 'Feature'), _line(1), _step(2, 'Details')]));
 
   Widget _step(int step, String label) {
     final active = _currentPage >= step;
@@ -442,17 +416,15 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
     ]);
   }
 
-  Widget _line(int step) {
-    return Expanded(child: Container(height: 2, margin: const EdgeInsets.only(bottom: 20, left: 4, right: 4), color: _currentPage > step ? const Color(0xFF5D4037) : const Color(0xFFF5E6CA)));
-  }
+  Widget _line(int step) => Expanded(child: Container(height: 2, margin: const EdgeInsets.only(bottom: 20, left: 4, right: 4), color: _currentPage > step ? const Color(0xFF5D4037) : const Color(0xFFF5E6CA)));
 
-  Widget _plainTextField(TextEditingController c, String label, {TextInputType keyboard = TextInputType.text, bool readOnly = false}) {
+  Widget _plainTextField(TextEditingController c, String label, {int maxLines = 1, bool readOnly = false}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: TextFormField(
-        controller: c, keyboardType: keyboard, readOnly: readOnly,
+        controller: c, maxLines: maxLines, readOnly: readOnly,
         decoration: InputDecoration(
-          labelText: label, filled: true, fillColor: readOnly ? Colors.grey.shade100 : Colors.white,
+          labelText: label, filled: true, fillColor: readOnly ? Colors.grey.shade50 : Colors.white,
           enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFF5E6CA))),
           focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF5D4037))),
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -461,95 +433,54 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
     );
   }
 
-  Widget _buildFormContainer({required Widget child}) {
-    return SingleChildScrollView(physics: const BouncingScrollPhysics(), padding: const EdgeInsets.all(20),
-      child: Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: const Color(0xFFF5E6CA).withOpacity(0.2), borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFF5E6CA))), child: child),
-    );
-  }
+  Widget _buildFormContainer({required Widget child}) => SingleChildScrollView(physics: const BouncingScrollPhysics(), padding: const EdgeInsets.all(20), child: Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: const Color(0xFFF5E6CA).withOpacity(0.2), borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFF5E6CA))), child: child));
 
-  Widget _buildFeaturePage() {
-    return _buildFormContainer(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [_title('Select Features', 'Set condition for each structure'), const SizedBox(height: 16), ..._features.map(_buildFeatureCard)]));
-  }
+  Widget _buildFeaturePage() => _buildFormContainer(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [_title('Select Features', 'Set condition for each structure'), const SizedBox(height: 16), ..._features.map(_buildFeatureCard)]));
 
   Widget _buildFeatureCard(FeatureEntry entry) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12), padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFF5E6CA))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [Text(entry.label, style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFF3E2723))), const SizedBox(width: 8), 
-          Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: entry.condition == 'old' ? Colors.grey.shade200 : Colors.green.shade100, borderRadius: BorderRadius.circular(6)),
-          child: Text(entry.condition == 'old' ? 'Old' : 'New', style: TextStyle(fontSize: 10, color: entry.condition == 'old' ? Colors.grey.shade800 : Colors.green.shade800, fontWeight: FontWeight.w600)))]),
+        Text(entry.label, style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFF3E2723))),
         const SizedBox(height: 8),
         Row(children: [
-          Expanded(child: _buildFeatureConditionButton(label: 'Old / Existing', isSelected: entry.condition == 'old', onTap: () { setState(() { entry.condition = 'old'; entry.dimension = null; entry.amount = null; }); })),
+          Expanded(child: _buildFeatureConditionButton(label: 'Old', isSelected: entry.condition == 'old', onTap: () => setState(() => entry.condition = 'old'))),
           const SizedBox(width: 8),
-          Expanded(child: _buildFeatureConditionButton(label: 'New Structure', isSelected: entry.condition == 'new', onTap: () { setState(() { entry.condition = 'new'; _selectedFeatureEntry = entry; }); })),
+          Expanded(child: _buildFeatureConditionButton(label: 'New', isSelected: entry.condition == 'new', onTap: () => setState(() => entry.condition = 'new'))),
         ]),
         if (entry.condition == 'new') ...[
           const SizedBox(height: 12),
-          ..._predefinedDimensions.map((dim) => _buildFeatureDimensionTile(entry: entry, value: dim['name'], title: dim['name'], subtitle: 'Estimate: ₹${dim['amount']}', onSelected: () { setState(() { entry.dimension = dim['name']; entry.amount = dim['amount'].toString(); }); })),
-          _buildFeatureDimensionTile(entry: entry, value: 'custom', title: 'Other', subtitle: 'Custom Size & Amount', onSelected: () { setState(() { entry.dimension = 'custom'; }); }),
-          if (entry.dimension == 'custom') ...[
-            const SizedBox(height: 8),
-            TextField(decoration: const InputDecoration(labelText: 'Size (e.g. 5 ft)', border: OutlineInputBorder()), onChanged: (v) => entry.customSize = v),
-            const SizedBox(height: 8),
-            TextField(decoration: const InputDecoration(labelText: 'Required Amount (Rs)', border: OutlineInputBorder()), keyboardType: TextInputType.number, onChanged: (v) => entry.amount = v),
-          ]
+          ..._predefinedDimensions.map((dim) => _buildFeatureDimensionTile(entry: entry, value: dim['name'], title: dim['name'], subtitle: '₹${dim['amount']}', onSelected: () => setState(() { entry.dimension = dim['name']; entry.amount = dim['amount'].toString(); }))),
         ]
       ]),
     );
   }
 
   Widget _buildFeatureConditionButton({required String label, required bool isSelected, required VoidCallback onTap}) {
-    return InkWell(onTap: onTap, child: Container(padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8), decoration: BoxDecoration(color: isSelected ? const Color(0xFFF5E6CA) : Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: isSelected ? const Color(0xFF5D4037) : const Color(0xFFF5E6CA))),
-    child: Row(children: [Icon(isSelected ? Icons.radio_button_checked : Icons.radio_button_off, size: 18, color: const Color(0xFF5D4037)), const SizedBox(width: 6), Expanded(child: Text(label, style: const TextStyle(fontSize: 12)))])));
+    return InkWell(onTap: onTap, child: Container(padding: const EdgeInsets.symmetric(vertical: 10), decoration: BoxDecoration(color: isSelected ? const Color(0xFFF5E6CA) : Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: isSelected ? const Color(0xFF5D4037) : const Color(0xFFF5E6CA))),
+    child: Center(child: Text(label, style: const TextStyle(fontSize: 12)))));
   }
 
   Widget _buildFeatureDimensionTile({required FeatureEntry entry, required String value, required String title, required String subtitle, required VoidCallback onSelected}) {
     final bool selected = entry.dimension == value;
     return InkWell(onTap: onSelected, child: Container(margin: const EdgeInsets.only(bottom: 6), padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: selected ? const Color(0xFFF5E6CA) : Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: selected ? const Color(0xFF5D4037) : const Color(0xFFF5E6CA))),
-    child: Row(children: [Icon(selected ? Icons.check_circle : Icons.circle_outlined, size: 20, color: const Color(0xFF5D4037)), const SizedBox(width: 10), Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)), Text(subtitle, style: const TextStyle(fontSize: 11, color: Colors.grey))])])));
+    child: Row(children: [Icon(selected ? Icons.check_circle : Icons.circle_outlined, size: 20, color: const Color(0xFF5D4037)), const SizedBox(width: 10), Text(title, style: const TextStyle(fontSize: 13)), const Spacer(), Text(subtitle, style: const TextStyle(fontSize: 11, color: Colors.grey))])));
   }
 
-  Widget _buildContactPage() {
-    return _buildFormContainer(child: Column(children: [
-      _title('Contact Details', 'Contractor Information'),
-      const SizedBox(height: 16),
-      _plainTextField(_contactNameController, 'Contact Name', readOnly: true),
-      _plainTextField(_contactPhoneController, 'Phone Number', readOnly: true),
-      _plainTextField(TextEditingController(text: _aadharNumber), 'Aadhar Number', readOnly: true),
-      _plainTextField(_estimatedAmountController, 'Total Estimated Cost', keyboard: TextInputType.number),
-      const SizedBox(height: 20),
-      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text('Site Photos', style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold)),
-        Text('(At least 5 required)', style: GoogleFonts.poppins(fontSize: 12, color: Colors.red, fontWeight: FontWeight.w500))
-      ]),
-      const SizedBox(height: 12),
-      ImagePickerWidget(
-        maxImages: 10, 
-        onImagesSelected: (imgs) => setState(() => _selectedImages = imgs)
-      )
-    ]));
-  }
+  Widget _buildContactPage() => _buildFormContainer(child: Column(children: [_title('Contact Details', 'Contractor Information'), const SizedBox(height: 16), _plainTextField(_contactNameController, 'Name', readOnly: true), _plainTextField(_contactPhoneController, 'Phone', readOnly: true), _plainTextField(_estimatedAmountController, 'Total Estimated Cost'), const SizedBox(height: 12), ImagePickerWidget(maxImages: 10, onImagesSelected: (imgs) => setState(() => _selectedImages = imgs))]));
 
-  Widget _buildNavigationButtons() {
-    return Container(padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20), decoration: const BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Color(0xFFF5E6CA)))),
-      child: Row(children: [
-        Expanded(child: OutlinedButton(onPressed: () { if (_currentPage > 0) { _pageController.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut); } else { Navigator.pop(context); } }, style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFF5D4037), side: const BorderSide(color: Color(0xFF5D4037)), padding: const EdgeInsets.symmetric(vertical: 15)), child: const Text('Back'))),
-        const SizedBox(width: 12),
-        Expanded(child: ElevatedButton(onPressed: _isLoading ? null : () { if (_validateCurrentPage()) { if (_currentPage < 2) { _pageController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut); } else { _createProject(); } } }, style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D4037), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 15)), child: _isLoading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : Text(_currentPage < 2 ? 'Continue' : 'Submit Proposal'))),
-      ]),
-    );
-  }
+  Widget _buildNavigationButtons() => Container(padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20), decoration: const BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Color(0xFFF5E6CA)))),
+    child: Row(children: [
+      Expanded(child: OutlinedButton(onPressed: () { if (_currentPage > 0) { _pageController.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut); } else { Navigator.pop(context); } }, style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFF5D4037), side: const BorderSide(color: Color(0xFF5D4037)), padding: const EdgeInsets.symmetric(vertical: 15)), child: const Text('Back'))),
+      const SizedBox(width: 12),
+      Expanded(child: ElevatedButton(onPressed: _isLoading ? null : () { if (_validateCurrentPage()) { if (_currentPage < 2) { _pageController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut); } else { _createProject(); } } }, style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5D4037), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 15)), child: _isLoading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : Text(_currentPage < 2 ? 'Continue' : 'Submit Proposal'))),
+    ]),
+  );
 
-  Widget _title(String t, String s) {
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(t, style: GoogleFonts.cinzel(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFF3E2723))), Text(s, style: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFF8D6E63)))]);
-  }
+  Widget _title(String t, String s) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(t, style: GoogleFonts.cinzel(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFF3E2723))), Text(s, style: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFF8D6E63)))]);
 
-  Widget _dateField() {
-    return Container(margin: const EdgeInsets.only(bottom: 12), padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFF5E6CA))),
-    child: Row(children: [const Icon(Icons.calendar_month, color: Color(0xFF5D4037), size: 20), const SizedBox(width: 12), Text(_selectedDate == null ? 'Visit Date' : DateFormat('dd-MM-yyyy').format(_selectedDate!), style: const TextStyle(fontSize: 14))]));
-  }
+  Widget _dateField() => Container(margin: const EdgeInsets.only(bottom: 12), padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFF5E6CA))), child: Row(children: [const Icon(Icons.calendar_month, color: Color(0xFF5D4037), size: 20), const SizedBox(width: 12), Text(_selectedDate == null ? 'Visit Date' : DateFormat('dd-MM-yyyy').format(_selectedDate!), style: const TextStyle(fontSize: 14))]));
 
   Future<void> _selectDate(BuildContext context) async {
     final picked = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2030));

@@ -173,21 +173,6 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
       if (!hasNew) {
         return _showWarning('Please select at least one structure to be NEW to proceed.');
       }
-
-      // FIX: Check if every "new" feature has a dimension and amount selected
-      for (var feature in _features) {
-        if (feature.condition == 'new') {
-          if (feature.dimension == null) {
-            return _showWarning('Please select a size for ${feature.label}');
-          }
-          if (feature.dimension == 'custom' && (feature.customSize == null || feature.customSize!.trim().isEmpty)) {
-            return _showWarning('Please enter custom size for ${feature.label}');
-          }
-          if (feature.amount == null || feature.amount!.trim().isEmpty) {
-            return _showWarning('Please ensure estimate amount is set for ${feature.label}');
-          }
-        }
-      }
       return true;
     }
 
@@ -207,17 +192,25 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
     return false;
   }
 
+  /// ROBUST LOCATION FETCHING (Like Uber/Ola)
   Future<void> _detectAndFillLocation() async {
     setState(() => _isLoading = true);
+    
     try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      bool serviceEnabled;
+      LocationPermission permission;
+
+      // 1. Check if location services are enabled
+      serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         setState(() => _isLoading = false);
         _showWarning("Location services are disabled. Please enable GPS.");
         await Geolocator.openLocationSettings();
         return;
       }
-      LocationPermission permission = await Geolocator.checkPermission();
+
+      // 2. Check for permissions
+      permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
@@ -226,20 +219,27 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
           return;
         }
       }
+
       if (permission == LocationPermission.deniedForever) {
         setState(() => _isLoading = false);
         _showWarning("Location permissions are permanently denied. Open settings to allow.");
         await Geolocator.openAppSettings();
         return;
       }
+
+      // 3. Get Position with high accuracy
+      // Note: use getCurrentPosition for a one-time precise fix
       Position position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.best,
         timeLimit: const Duration(seconds: 15),
       );
+
       setState(() {
         _mapLocationController.text = "${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}";
       });
+      
     } catch (e) {
+      debugPrint("Location Error: $e");
       _showWarning("Timeout or Error fetching location. Try again.");
     } finally {
       setState(() => _isLoading = false);
@@ -384,6 +384,7 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
           if (controller.text.isEmpty && _talukController.text.isNotEmpty) {
             controller.text = _talukController.text;
           }
+          
           bool canInput = _districtController.text.isNotEmpty;
           return _buildStyledTextField(
             controller, 

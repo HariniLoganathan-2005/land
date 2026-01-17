@@ -18,12 +18,12 @@ class CreateProjectScreen extends StatefulWidget {
 }
 
 class FeatureEntry {
-  final String key;
-  final String label;
-  String condition;
-  String? dimension;
-  String? amount;
-  String? customSize;
+  final String key; 
+  final String label; 
+  String condition; 
+  String? dimension; 
+  String? amount; 
+  String? customSize; 
 
   FeatureEntry({
     required this.key,
@@ -168,25 +168,11 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
       return true;
     }
     
+    // FIX: Check if at least one structure is marked as "new"
     if (_currentPage == 1) {
       bool hasNew = _features.any((f) => f.condition == 'new');
       if (!hasNew) {
         return _showWarning('Please select at least one structure to be NEW to proceed.');
-      }
-
-      // FIX: Check if every "new" feature has a dimension and amount selected
-      for (var feature in _features) {
-        if (feature.condition == 'new') {
-          if (feature.dimension == null) {
-            return _showWarning('Please select a size for ${feature.label}');
-          }
-          if (feature.dimension == 'custom' && (feature.customSize == null || feature.customSize!.trim().isEmpty)) {
-            return _showWarning('Please enter custom size for ${feature.label}');
-          }
-          if (feature.amount == null || feature.amount!.trim().isEmpty) {
-            return _showWarning('Please ensure estimate amount is set for ${feature.label}');
-          }
-        }
       }
       return true;
     }
@@ -210,37 +196,12 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
   Future<void> _detectAndFillLocation() async {
     setState(() => _isLoading = true);
     try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        setState(() => _isLoading = false);
-        _showWarning("Location services are disabled. Please enable GPS.");
-        await Geolocator.openLocationSettings();
-        return;
-      }
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) {
-          setState(() => _isLoading = false);
-          _showWarning("Location permissions are denied.");
-          return;
-        }
-      }
-      if (permission == LocationPermission.deniedForever) {
-        setState(() => _isLoading = false);
-        _showWarning("Location permissions are permanently denied. Open settings to allow.");
-        await Geolocator.openAppSettings();
-        return;
-      }
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.best,
-        timeLimit: const Duration(seconds: 15),
-      );
+      final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
       setState(() {
         _mapLocationController.text = "${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}";
       });
     } catch (e) {
-      _showWarning("Timeout or Error fetching location. Try again.");
+      _showWarning("Could not fetch location. Ensure GPS is on.");
     } finally {
       setState(() => _isLoading = false);
     }
@@ -328,12 +289,7 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
               Container(
                 margin: const EdgeInsets.only(bottom: 12),
                 decoration: BoxDecoration(color: const Color(0xFF5D4037), borderRadius: BorderRadius.circular(10)),
-                child: IconButton(
-                  icon: _isLoading 
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Icon(Icons.my_location, color: Colors.white), 
-                  onPressed: _isLoading ? null : _detectAndFillLocation
-                ),
+                child: IconButton(icon: const Icon(Icons.my_location, color: Colors.white), onPressed: _detectAndFillLocation),
               ),
             ],
           ),
@@ -381,9 +337,11 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
           setState(() => _talukController.text = selection);
         },
         fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+          // FIX: Persistence logic - restore value if already present in controller
           if (controller.text.isEmpty && _talukController.text.isNotEmpty) {
             controller.text = _talukController.text;
           }
+          
           bool canInput = _districtController.text.isNotEmpty;
           return _buildStyledTextField(
             controller, 
@@ -525,6 +483,7 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
         Text('(At least 5 required)', style: GoogleFonts.poppins(fontSize: 12, color: Colors.red, fontWeight: FontWeight.w500))
       ]),
       const SizedBox(height: 12),
+      // Updated Widget call to support both Camera and Gallery
       ImagePickerWidget(
         maxImages: 10, 
         onImagesSelected: (imgs) => setState(() => _selectedImages = imgs)
