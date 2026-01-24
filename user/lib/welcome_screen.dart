@@ -9,6 +9,7 @@ import 'splash_screen.dart';
 import '../screens/project_overview_screen.dart';
 import '../screens/user_completed_project_screen.dart';
 import '../screens/all_completed_works_screen.dart';
+import 'pending_project_screen.dart';
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
@@ -43,7 +44,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       final userDoc = await _firestore.collection('users').doc(user.uid).get();
       if (mounted) {
         setState(() {
-          _userData = userDoc.data() ?? <String, dynamic>{'name': 'User', 'email': user.email};
+          _userData = userDoc.data() ??
+              <String, dynamic>{'name': 'User', 'email': user.email};
           _loadingUser = false;
         });
       }
@@ -75,7 +77,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     );
   }
 
-  // New function to handle moving rejected projects to the drawer section
   Future<void> _archiveRejectedProject(String docId) async {
     try {
       await _firestore.collection('projects').doc(docId).update({
@@ -109,16 +110,12 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         ),
       );
     } else if (status == 'rejected') {
-      _showRejectedDialog(project['id']);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Your plan is currently under review. You can access the project dashboard once it is sanctioned.',
-            style: GoogleFonts.poppins(),
-          ),
-          backgroundColor: const Color(0xFF5D4037),
-          behavior: SnackBarBehavior.floating,
+      _showRejectedDialog(project['docId'] ?? project['id']);
+    } else if (status == 'pending') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PendingProjectScreen(project: project),
         ),
       );
     }
@@ -131,16 +128,21 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
           'Project Rejected',
-          style: GoogleFonts.cinzel(fontWeight: FontWeight.bold, color: Colors.red[900]),
+          style: GoogleFonts.cinzel(
+              fontWeight: FontWeight.bold, color: Colors.red[900]),
         ),
         content: Text(
           'Unfortunately, your proposal was not accepted. You can remove this from view to propose a new one.',
           style: GoogleFonts.poppins(),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red[900], foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red[900],
+                foregroundColor: Colors.white),
             onPressed: () {
               Navigator.pop(context);
               _archiveRejectedProject(docId);
@@ -157,7 +159,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     if (_loadingUser) {
       return const Scaffold(
         backgroundColor: Color(0xFFFFFDF5),
-        body: Center(child: CircularProgressIndicator(color: Color(0xFF5D4037))),
+        body:
+            Center(child: CircularProgressIndicator(color: Color(0xFF5D4037))),
       );
     }
 
@@ -181,7 +184,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               Expanded(
                 child: SingleChildScrollView(
                   physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 20.0, vertical: 12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -216,12 +220,20 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               height: 54,
               decoration: const BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: LinearGradient(colors: [Color(0xFFD4AF37), Color(0xFFB8962E)]),
-                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 4))],
+                gradient: LinearGradient(
+                    colors: [Color(0xFFD4AF37), Color(0xFFB8962E)]),
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 8,
+                      offset: Offset(0, 4))
+                ],
               ),
               child: Padding(
                 padding: const EdgeInsets.all(3),
-                child: ClipOval(child: Image.asset('assets/images/shiva.png', fit: BoxFit.cover)),
+                child: ClipOval(
+                    child: Image.asset('assets/images/shiva.png',
+                        fit: BoxFit.cover)),
               ),
             ),
             const SizedBox(width: 12),
@@ -230,8 +242,12 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               children: [
                 Text('Aranpani',
                     style: GoogleFonts.cinzelDecorative(
-                        fontSize: 20, fontWeight: FontWeight.bold, color: const Color(0xFF5D4037))),
-                Text('Welcome', style: GoogleFonts.poppins(color: const Color(0xFF8D6E63), fontSize: 12)),
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF5D4037))),
+                Text('Welcome',
+                    style: GoogleFonts.poppins(
+                        color: const Color(0xFF8D6E63), fontSize: 12)),
               ],
             ),
           ]),
@@ -247,14 +263,19 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   Widget _welcomeCard() {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: const Color(0xFFEFE6D5), borderRadius: BorderRadius.circular(18)),
+      decoration: BoxDecoration(
+          color: const Color(0xFFEFE6D5),
+          borderRadius: BorderRadius.circular(18)),
       child: Row(
         children: [
-          const CircleAvatar(backgroundColor: Color(0xFF5D4037), child: Icon(Icons.person, color: Colors.white)),
+          const CircleAvatar(
+              backgroundColor: Color(0xFF5D4037),
+              child: Icon(Icons.person, color: Colors.white)),
           const SizedBox(width: 14),
           Text(
             'Welcome back, ${_userData?['name'] ?? 'User'}',
-            style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: const Color(0xFF3E2723)),
+            style: GoogleFonts.poppins(
+                fontWeight: FontWeight.bold, color: const Color(0xFF3E2723)),
           ),
         ],
       ),
@@ -263,7 +284,10 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
   Widget _projectHeader() {
     return Text('Current Proposal',
-        style: GoogleFonts.cinzel(fontSize: 20, fontWeight: FontWeight.bold, color: const Color(0xFF3E2723)));
+        style: GoogleFonts.cinzel(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFF3E2723)));
   }
 
   Widget _buildProjectLogicSection() {
@@ -283,25 +307,28 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
         final allDocs = snapshot.data?.docs ?? [];
 
-        // Logic: Project is "active" if it is NOT completed AND NOT archived
         final activeDocs = allDocs.where((doc) {
           final status = (doc['status'] ?? '').toString().toLowerCase();
           return status != 'completed' && status != 'archived_rejected';
         }).toList();
 
-        // Check specifically for Pending/Ongoing to disable proposal button
         final bool hasLockedProject = activeDocs.any((doc) {
           final s = doc['status'].toString().toLowerCase();
           return s == 'pending' || s == 'approved' || s == 'ongoing';
         });
 
-        // Rejected projects show in list but DON'T lock the "Propose" button
         final bool canPropose = !hasLockedProject;
 
         Map<String, dynamic>? projectData;
         if (activeDocs.isNotEmpty) {
           final doc = activeDocs.first;
-          projectData = {'id': doc.id, 'projectId': doc.id, ...doc.data() as Map<String, dynamic>};
+          projectData = {
+            'docId': doc.id, // CRITICAL: Store the document ID
+            'id': doc.id,
+            'projectId': doc['projectId'] ?? doc.id,
+            'projectNumber': doc['projectNumber'],
+            ...doc.data() as Map<String, dynamic>
+          };
         }
 
         return Column(
@@ -314,7 +341,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               const Center(
                 child: Padding(
                   padding: EdgeInsets.all(20.0),
-                  child: Text("No active plans at the moment.", style: TextStyle(color: Colors.grey)),
+                  child: Text("No active plans at the moment.",
+                      style: TextStyle(color: Colors.grey)),
                 ),
               ),
           ],
@@ -331,9 +359,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         icon: const Icon(Icons.add_circle_outline),
         label: Text(canPropose ? "Propose a plan" : "Plan Under Review"),
         style: ElevatedButton.styleFrom(
-          backgroundColor: canPropose ? const Color(0xFF5D4037) : Colors.grey[400],
+          backgroundColor:
+              canPropose ? const Color(0xFF5D4037) : Colors.grey[400],
           foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
         onPressed: canPropose ? _navigateToCreateProject : null,
       ),
@@ -341,7 +371,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   }
 
   Widget _projectSection(Map<String, dynamic> project) {
-    final String status = (project['status'] ?? 'pending').toString().toLowerCase();
+    final String status =
+        (project['status'] ?? 'pending').toString().toLowerCase();
 
     Color statusColor;
     Color bgColor;
@@ -372,7 +403,10 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: statusColor.withOpacity(0.3), width: 1),
           boxShadow: [
-            BoxShadow(color: statusColor.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 8))
+            BoxShadow(
+                color: statusColor.withOpacity(0.05),
+                blurRadius: 15,
+                offset: const Offset(0, 8))
           ],
         ),
         child: Column(
@@ -382,45 +416,56 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(8)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                      color: bgColor, borderRadius: BorderRadius.circular(8)),
                   child: Row(
                     children: [
                       Icon(statusIcon, size: 14, color: statusColor),
                       const SizedBox(width: 5),
                       Text(statusText,
                           style: GoogleFonts.poppins(
-                              fontSize: 11, fontWeight: FontWeight.bold, color: statusColor)),
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: statusColor)),
                     ],
                   ),
                 ),
-                // Delete/Archive Icon for Rejected projects
                 if (status == 'rejected')
                   IconButton(
                     constraints: const BoxConstraints(),
                     padding: EdgeInsets.zero,
                     icon: const Icon(Icons.delete_outline, color: Colors.red),
-                    onPressed: () => _showRejectedDialog(project['id']),
+                    onPressed: () => _showRejectedDialog(project['docId'] ?? project['id']),
                   )
                 else
                   Text(
-                    project['projectId'] ?? '',
-                    style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey),
+                    project['projectNumber']?.toString() ?? project['projectId']?.toString() ?? '',
+                    style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey),
                   ),
               ],
             ),
             const SizedBox(height: 16),
             Text(
               project['place'] ?? 'Unnamed Temple',
-              style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold, color: const Color(0xFF3E2723)),
+              style: GoogleFonts.poppins(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF3E2723)),
             ),
             const SizedBox(height: 4),
             Row(
               children: [
-                const Icon(Icons.location_on, size: 14, color: Color(0xFF8D6E63)),
+                const Icon(Icons.location_on,
+                    size: 14, color: Color(0xFF8D6E63)),
                 const SizedBox(width: 4),
                 Text("${project['taluk']}, ${project['district']}",
-                    style: GoogleFonts.poppins(fontSize: 13, color: const Color(0xFF8D6E63))),
+                    style: GoogleFonts.poppins(
+                        fontSize: 13, color: const Color(0xFF8D6E63))),
               ],
             ),
             const Divider(height: 30),
@@ -429,11 +474,15 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    status == 'rejected' ? 'Plan Rejected - Click to see why' : 'Click to view details',
-                    style: GoogleFonts.poppins(fontSize: 12, color: statusColor),
+                    status == 'rejected'
+                        ? 'Plan Rejected - Click to see why'
+                        : 'Click to view details',
+                    style:
+                        GoogleFonts.poppins(fontSize: 12, color: statusColor),
                   ),
                 ),
-                const Icon(Icons.arrow_forward_ios, size: 14, color: Color(0xFF5D4037)),
+                const Icon(Icons.arrow_forward_ios,
+                    size: 14, color: Color(0xFF5D4037)),
               ],
             ),
           ],
@@ -459,7 +508,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   }
 
   Future<void> _openProfile() async {
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen()));
+    await Navigator.push(
+        context, MaterialPageRoute(builder: (_) => const ProfileScreen()));
     _loadUserData();
     setState(() => _currentIndex = 0);
   }
@@ -470,8 +520,10 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         children: [
           UserAccountsDrawerHeader(
             decoration: const BoxDecoration(color: Color(0xFFF5E6CA)),
-            accountName: Text(_userData?['name'] ?? 'User', style: const TextStyle(color: Color(0xFF3E2723))),
-            accountEmail: Text(_userData?['email'] ?? '', style: const TextStyle(color: Color(0xFF3E2723))),
+            accountName: Text(_userData?['name'] ?? 'User',
+                style: const TextStyle(color: Color(0xFF3E2723))),
+            accountEmail: Text(_userData?['email'] ?? '',
+                style: const TextStyle(color: Color(0xFF3E2723))),
             currentAccountPicture: CircleAvatar(
               backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
               child: photoUrl == null ? const Icon(Icons.person) : null,
@@ -485,14 +537,12 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               _navigateToHistory();
             },
           ),
-          // NEW SECTION: Rejected History
           ListTile(
-            leading: const Icon(Icons.report_gmailerrorred_rounded, color: Colors.red),
+            leading: const Icon(Icons.report_gmailerrorred_rounded,
+                color: Colors.red),
             title: const Text('Rejected Proposals'),
             onTap: () {
               Navigator.pop(context);
-              // Navigate to a screen filtered by status: 'archived_rejected'
-              // For brevity, assuming you might create a generic history screen
             },
           ),
           const Divider(),

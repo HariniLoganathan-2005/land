@@ -54,6 +54,10 @@ class _DistrictPlacesScreenState extends State<DistrictPlacesScreen> {
         if (taluk.isEmpty) continue;
 
         final bool isSanctioned = data['isSanctioned'] == true;
+        final String rawStatus = (data['status'] ?? 'pending').toString().toLowerCase();
+        
+        // CRITICAL: Skip rejected projects entirely
+        if (rawStatus == 'rejected') continue;
 
         talukMap.putIfAbsent(taluk, () {
           return {
@@ -64,8 +68,11 @@ class _DistrictPlacesScreenState extends State<DistrictPlacesScreen> {
           };
         });
 
+        // Count all non-rejected projects
         talukMap[taluk]!['temples'] = (talukMap[taluk]!['temples'] as int) + 1;
-        if (!isSanctioned) {
+        
+        // Count only pending (not sanctioned AND not rejected) as "NEW"
+        if (!isSanctioned && rawStatus != 'rejected') {
           talukMap[taluk]!['newRequests'] = (talukMap[taluk]!['newRequests'] as int) + 1;
         }
       }
@@ -73,7 +80,13 @@ class _DistrictPlacesScreenState extends State<DistrictPlacesScreen> {
       if (mounted) {
         setState(() {
           places = talukMap.values.toList()
-            ..sort((a, b) => a['name'].toString().compareTo(b['name'].toString()));
+            ..sort((a, b) {
+              // Sort by newRequests count first (descending), then by name
+              int countA = a['newRequests'] as int;
+              int countB = b['newRequests'] as int;
+              if (countB != countA) return countB.compareTo(countA);
+              return a['name'].toString().compareTo(b['name'].toString());
+            });
         });
       }
     } catch (e) {
@@ -81,6 +94,11 @@ class _DistrictPlacesScreenState extends State<DistrictPlacesScreen> {
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
+  }
+
+  // Refresh data when returning from PlaceTemplesScreen
+  void _refreshOnReturn() {
+    _loadPlaces();
   }
 
   @override
@@ -159,10 +177,16 @@ class _DistrictPlacesScreenState extends State<DistrictPlacesScreen> {
                 ? const Center(child: CircularProgressIndicator(color: primaryMaroon))
                 : filtered.isEmpty
                     ? const Center(child: Text('No taluks found', style: TextStyle(color: darkMaroonText)))
-                    : ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                        itemCount: filtered.length,
-                        itemBuilder: (context, index) => _buildTalukCard(filtered[index]),
+                    : RefreshIndicator(
+                        color: primaryMaroon,
+                        onRefresh: () async {
+                          await _loadPlaces();
+                        },
+                        child: ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                          itemCount: filtered.length,
+                          itemBuilder: (context, index) => _buildTalukCard(filtered[index]),
+                        ),
                       ),
           ),
         ],
@@ -195,45 +219,58 @@ class _DistrictPlacesScreenState extends State<DistrictPlacesScreen> {
   }
 
   Widget _buildTalukCard(Map<String, dynamic> place) {
+    final int newRequestCount = place['newRequests'] as int;
+    final int totalTemples = place['temples'] as int;
+    
     return Card(
-      elevation: 0,
+      elevation: newRequestCount > 0 ? 3 : 1,
       color: Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: secondaryGold, width: 0.5),
+        side: BorderSide(
+          color: newRequestCount > 0 ? primaryMaroon.withOpacity(0.3) : secondaryGold, 
+          width: newRequestCount > 0 ? 1.5 : 0.5,
+        ),
       ),
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
-        onTap: () {
-          Navigator.push(
+        onTap: () async {
+          await Navigator.push(
             context,
             MaterialPageRoute(
               builder: (_) => PlaceTemplesScreen(
-                placeId: place['id'], // Ensure your PlaceTemplesScreen accepts 'placeId'
+                placeId: place['id'],
               ),
             ),
           );
+          // Refresh data when returning
+          _refreshOnReturn();
         },
         title: Text(
           place['name'],
           style: const TextStyle(fontWeight: FontWeight.bold, color: darkMaroonText),
         ),
-        subtitle: Text('${place['temples']} Projects'),
+        subtitle: Text('$totalTemples Projects'),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if ((place['newRequests'] as int) > 0)
+            if (newRequestCount > 0)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: primaryMaroon,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  '${place['newRequests']} NEW',
-                  style: const TextStyle(color: lightGoldText, fontSize: 10, fontWeight: FontWeight.bold),
+                  '$newRequestCount NEW',
+                  style: const TextStyle(
+                    color: lightGoldText,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
+            const SizedBox(width: 8),
             const Icon(Icons.chevron_right, color: primaryAccentGold),
           ],
         ),

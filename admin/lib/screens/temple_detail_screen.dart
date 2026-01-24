@@ -16,7 +16,7 @@ class TempleDetailScreen extends StatefulWidget {
   });
 
   @override
-  State createState() => _TempleDetailScreenState();
+  State<TempleDetailScreen> createState() => _TempleDetailScreenState();
 }
 
 class _TempleDetailScreenState extends State<TempleDetailScreen> {
@@ -33,7 +33,7 @@ class _TempleDetailScreenState extends State<TempleDetailScreen> {
     _loadTemple();
   }
 
-  Future _loadTemple() async {
+  Future<void> _loadTemple() async {
     if (!mounted) return;
     setState(() => isLoading = true);
 
@@ -49,7 +49,6 @@ class _TempleDetailScreenState extends State<TempleDetailScreen> {
         final data = doc.data()!;
         temple!.addAll(data);
 
-        // Ensure both id and projectId are set to the project document id
         temple!['id'] = widget.templeId;
         temple!['projectId'] = widget.templeId;
       }
@@ -68,9 +67,7 @@ class _TempleDetailScreenState extends State<TempleDetailScreen> {
     if (temple == null) return;
     final t = temple!;
 
-    // 1. Status Logic
-    final String currentStatus =
-        (t['status'] ?? 'pending').toString().toLowerCase();
+    final String currentStatus = (t['status'] ?? 'pending').toString().toLowerCase();
     final bool isSanctioned = t['isSanctioned'] == true;
     final int progress = ((t['progress'] ?? 0) as num).toInt();
 
@@ -84,20 +81,17 @@ class _TempleDetailScreenState extends State<TempleDetailScreen> {
       t['status'] = 'ongoing';
     }
 
-    // 2. Remove aadhar-related fields
     t.remove('aadhar');
     t.remove('userAadhar');
     t.remove('aadharNumber');
 
-    // 3. Site images normalization
     if (t['imageUrls'] != null) {
       if (t['imageUrls'] is List) {
         t['imageUrls'] = (t['imageUrls'] as List)
             .map((e) => e.toString())
             .where((url) => url.startsWith('http'))
             .toList();
-      } else if (t['imageUrls'] is String &&
-          t['imageUrls'].toString().startsWith('http')) {
+      } else if (t['imageUrls'] is String && t['imageUrls'].toString().startsWith('http')) {
         t['imageUrls'] = [t['imageUrls'].toString()];
       } else {
         t['imageUrls'] = [];
@@ -111,16 +105,11 @@ class _TempleDetailScreenState extends State<TempleDetailScreen> {
       t['imageUrls'] = [];
     }
 
-    // 4. User info fallback
     t['userName'] = (t['userName'] ?? t['name'] ?? 'User').toString();
     t['userEmail'] = (t['userEmail'] ?? t['email'] ?? '').toString();
     t['userPhone'] = (t['userPhone'] ?? t['phone'] ?? '').toString();
+    t['projectNumber'] = (t['projectNumber'] ?? t['projectId'] ?? 'P000').toString();
 
-    // 5. Project number for display; projectId is the actual Firestore id
-    t['projectNumber'] =
-        (t['projectNumber'] ?? t['projectId'] ?? 'P000').toString();
-
-    // 6. Display name fallback
     t['name'] = (t['name'] ??
             (t['feature'] != null && t['feature'] != ''
                 ? '${t['feature']} Project'
@@ -128,77 +117,80 @@ class _TempleDetailScreenState extends State<TempleDetailScreen> {
         .toString();
   }
 
-  @override
-  @override
-Widget build(BuildContext context) {
-  if (isLoading || temple == null) {
-    return Scaffold(
-      backgroundColor: backgroundCream,
-      appBar: AppBar(
-        backgroundColor: primaryMaroon,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          'Loading Details...',
-          style: TextStyle(color: Color(0xFFFFF4D6), fontSize: 18),
-        ),
-      ),
-      body: const Center(
-        child: CircularProgressIndicator(color: primaryMaroon),
-      ),
-    );
+  /// Updates Firestore and pops the screen with a 'deleted' result 
+  /// so the calling list can remove the entry from the UI.
+  void _markAsRejected() async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('projects')
+          .doc(widget.templeId)
+          .update({
+        'status': 'rejected',
+        'isSanctioned': false,
+      });
+
+      if (mounted) {
+        // Return 'deleted' to the previous screen
+        Navigator.pop(context, 'deleted');
+      }
+    } catch (e) {
+      debugPrint('Error rejecting project: $e');
+    }
   }
 
-  final String status = (temple!['status'] ?? 'pending').toString();
-
-  // FIX: strongly typed map
-  final Map<String, dynamic> displayData =
-      Map<String, dynamic>.from(temple! as Map);
-
-  switch (status) {
-    case 'pending':
-      return PendingTempleDetailScreen(
-        temple: displayData,
-        onUpdated: (updated) => Navigator.pop(context, updated),
-        onDeleted: () => _markAsRejected(),
-      );
-    case 'ongoing':
-      return OngoingTempleDetailScreen(
-        temple: displayData,
-        onUpdated: (updated) => Navigator.pop(context, updated),
-      );
-    case 'completed':
-      return CompletedTempleDetailScreen(
-        temple: displayData,
-        onUpdated: (updated) => Navigator.pop(context, updated),
-      );
-    case 'rejected':
+  @override
+  Widget build(BuildContext context) {
+    if (isLoading || temple == null) {
       return Scaffold(
         backgroundColor: backgroundCream,
         appBar: AppBar(
-          backgroundColor: Colors.red[900],
-          title: const Text("Rejected Project"),
+          backgroundColor: primaryMaroon,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: const Text(
+            'Loading Details...',
+            style: TextStyle(color: Color(0xFFFFF4D6), fontSize: 18),
+          ),
         ),
         body: const Center(
-          child: Text("This project has been rejected."),
+          child: CircularProgressIndicator(color: primaryMaroon),
         ),
       );
-    default:
-      return const Scaffold(
-        body: Center(child: Text('Unknown Status')),
-      );
-  }
-}
+    }
 
+    final String status = (temple!['status'] ?? 'pending').toString();
+    final Map<String, dynamic> displayData = Map<String, dynamic>.from(temple!);
 
-  void _markAsRejected() async {
-    await FirebaseFirestore.instance
-        .collection('projects')
-        .doc(widget.templeId)
-        .update({'status': 'rejected', 'isSanctioned': false});
-    if (mounted) Navigator.pop(context, null);
+    switch (status) {
+      case 'pending':
+        return PendingTempleDetailScreen(
+          temple: displayData,
+          onUpdated: (updated) => Navigator.pop(context, updated),
+          onDeleted: _markAsRejected,
+        );
+      case 'ongoing':
+        return OngoingTempleDetailScreen(
+          temple: displayData,
+          onUpdated: (updated) => Navigator.pop(context, updated),
+        );
+      case 'completed':
+        return CompletedTempleDetailScreen(
+          temple: displayData,
+          onUpdated: (updated) => Navigator.pop(context, updated),
+        );
+      case 'rejected':
+        // If it's already rejected, immediately pop the screen to remove it from view
+        Future.microtask(() {
+          if (mounted) Navigator.pop(context, 'deleted');
+        });
+        return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      default:
+        return const Scaffold(
+          body: Center(child: Text('Unknown Status')),
+        );
+    }
   }
 }

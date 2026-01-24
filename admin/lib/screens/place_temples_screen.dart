@@ -90,9 +90,13 @@ class _PlaceTemplesScreenState extends State<PlaceTemplesScreen> {
 
         final bool isSanctioned = data['isSanctioned'] == true;
         final int progress = ((data['progress'] ?? 0) as num).toInt();
+        final String rawStatus = (data['status'] ?? 'pending').toString().toLowerCase();
 
         String status;
-        if (!isSanctioned) {
+        // CRITICAL: Check if status is explicitly 'rejected' first
+        if (rawStatus == 'rejected') {
+          status = 'rejected';
+        } else if (!isSanctioned) {
           status = 'pending';
         } else if (progress >= 100) {
           status = 'completed';
@@ -126,6 +130,10 @@ class _PlaceTemplesScreenState extends State<PlaceTemplesScreen> {
           'raw': data,
         };
       }).toList();
+
+      // CRITICAL: Filter out rejected projects from the list
+      temples.removeWhere((t) => t['status'] == 'rejected');
+      
     } catch (e) {
       debugPrint('Error loading temples: $e');
       temples = [];
@@ -257,7 +265,7 @@ class _PlaceTemplesScreenState extends State<PlaceTemplesScreen> {
         ),
         trailing: const Icon(Icons.chevron_right, color: primaryMaroon),
         onTap: () async {
-          final updated = await Navigator.push<Map<String, dynamic>?>(
+          final result = await Navigator.push<dynamic>(
             context,
             MaterialPageRoute(
               builder: (_) => TempleDetailScreen(
@@ -267,15 +275,29 @@ class _PlaceTemplesScreenState extends State<PlaceTemplesScreen> {
             ),
           );
 
-          if (updated == null) {
+          // Handle the result from TempleDetailScreen
+          if (result == 'deleted' || result == 'removed') {
+            // IMMEDIATELY remove from the list
             setState(() {
               temples.removeWhere((t) => t['id'] == temple['id']);
             });
-          } else {
-            final idx = temples.indexWhere((t) => t['id'] == updated['id']);
+            
+            // Show a confirmation message
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Project removed successfully'),
+                  backgroundColor: Colors.green,
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            }
+          } else if (result is Map<String, dynamic>) {
+            // Update the temple data if it was modified
+            final idx = temples.indexWhere((t) => t['id'] == result['id']);
             if (idx != -1) {
               setState(() {
-                temples[idx] = updated;
+                temples[idx] = result;
               });
             }
           }

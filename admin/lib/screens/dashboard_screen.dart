@@ -23,6 +23,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   StreamSubscription? _projectsSubscription;
   StreamSubscription? _usersSubscription;
 
+  // Store snapshots to combine them effectively
+  QuerySnapshot? _lastProjectsSnap;
+  QuerySnapshot? _lastUsersSnap;
+
   @override
   void initState() {
     super.initState();
@@ -36,29 +40,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.dispose();
   }
 
-  /// Real-time listeners automatically "refresh" the screen whenever 
-  /// data in Firebase changes because of the setState inside the listener.
   void _startRealTimeListeners() {
     setState(() => isLoading = true);
 
+    // Listen to Projects
     _projectsSubscription = FirebaseFirestore.instance
         .collection('projects')
         .snapshots()
         .listen((projectsSnap) {
-      
-      _usersSubscription?.cancel(); 
-      _usersSubscription = FirebaseFirestore.instance
-          .collection('users')
-          .snapshots()
-          .listen((usersSnap) {
-        _processData(projectsSnap, usersSnap);
-      });
+      _lastProjectsSnap = projectsSnap;
+      if (_lastUsersSnap != null) {
+        _processData(_lastProjectsSnap!, _lastUsersSnap!);
+      }
     });
+
+    // Listen to Users
+    _usersSubscription = FirebaseFirestore.instance
+        .collection('users')
+        .snapshots()
+        .listen((usersSnap) {
+      _lastUsersSnap = usersSnap;
+      if (_lastProjectsSnap != null) {
+        _processData(_lastProjectsSnap!, _lastUsersSnap!);
+      } else {
+        // If projects haven't loaded yet, we still want to show users
+        _fetchProjectsOnceAndProcess(usersSnap);
+      }
+    });
+  }
+
+  // Fallback if one stream fires before the other
+  Future<void> _fetchProjectsOnceAndProcess(QuerySnapshot usersSnap) async {
+    final projectsSnap = await FirebaseFirestore.instance.collection('projects').get();
+    _processData(projectsSnap, usersSnap);
   }
 
   void _processData(QuerySnapshot projectsSnap, QuerySnapshot usersSnap) {
     try {
-      // We use Sets of User IDs for reliable mapping
       final Set<String> idsWithOngoing = {};
       final Set<String> idsWithProposals = {};
       final Map<String, Map<String, dynamic>> byDistrict = {};
@@ -66,14 +84,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // 1. Process Projects
       for (final doc in projectsSnap.docs) {
         final data = doc.data() as Map<String, dynamic>;
+        final String status = (data['status'] ?? 'pending').toString().toLowerCase();
+        
+        // REMOVE REJECTED FROM UI ENTIRELY
+        if (status == 'rejected') continue;
+
         final String dName = (data['district'] ?? '').toString().trim();
         final String uId = (data['userId'] ?? '').toString().trim();
-        final String status = (data['status'] ?? 'pending').toString().toLowerCase();
         final bool isSanctioned = data['isSanctioned'] == true;
 
         if (uId.isNotEmpty) {
           idsWithProposals.add(uId);
-          // Flag as ongoing if sanctioned OR status is specifically 'ongoing'
           if (isSanctioned || status == 'ongoing') {
             idsWithOngoing.add(uId);
           }
@@ -107,7 +128,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final data = doc.data() as Map<String, dynamic>;
         final String currentUserId = doc.id;
         
-        // Helper to sanitize "null" or empty strings
         String sanitize(dynamic value) {
           if (value == null) return 'Not Assigned';
           String valStr = value.toString().trim();
@@ -118,7 +138,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return {
           'id': currentUserId,
           'name': data['name'] ?? data['contactName'] ?? 'Unknown User',
-          'phone': data['phone'] ?? data['phoneNumber'] ?? data['contactPhone'] ?? 'N/A',
+          'phone': data['phone'] ?? data['phoneNumber'] ?? 'N/A',
           'district': sanitize(data['district']),
           'taluk': sanitize(data['taluk']),
           'isOngoing': idsWithOngoing.contains(currentUserId),
@@ -126,22 +146,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
         };
       }).toList();
 
-      // Sort Users A-Z
       allUsers.sort((a, b) => a['name'].toString().toLowerCase().compareTo(b['name'].toString().toLowerCase()));
 
-      setState(() {
-        districts = byDistrict.values.toList();
-        districts.sort((a, b) {
-          int countA = a['newRequests'] as int;
-          int countB = b['newRequests'] as int;
-          if (countB != countA) return countB.compareTo(countA);
-          return a['name'].toString().compareTo(b['name'].toString());
-        });
+      if (mounted) {
+        setState(() {
+          districts = byDistrict.values.toList();
+          districts.sort((a, b) {
+            int countA = a['newRequests'] as int;
+            int countB = b['newRequests'] as int;
+            if (countB != countA) return countB.compareTo(countA);
+            return a['name'].toString().compareTo(b['name'].toString());
+          });
 
-        users = allUsers; 
-        isLoading = false;
-        notifications = [{'id': '1', 'message': 'Database Updated', 'time': 'Just now', 'read': false}];
-      });
+          users = allUsers;
+          isLoading = false;
+          notifications = [{'id': '1', 'message': 'Sync Complete', 'time': 'Live', 'read': false}];
+        });
+      }
     } catch (e) {
       debugPrint('Error processing data: $e');
     }
@@ -153,7 +174,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFFFF7E8),
-      endDrawer: showNotifications ? _buildNotificationsDrawer() : null,
+      endDrawer: _buildNotificationsDrawer(),
       body: Builder(
         builder: (innerContext) {
           return Column(
@@ -185,14 +206,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Row(
                     children: [
-                      IconButton(icon: const Icon(Icons.menu, color: Color(0xFFFFF4D6)), onPressed: _showAdminMenu),
+                      IconButton(
+                        icon: const Icon(Icons.menu, color: Color(0xFFFFF4D6)), 
+                        onPressed: _showAdminMenu
+                      ),
                       const SizedBox(width: 8),
                       const Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -226,10 +249,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       children: [
         IconButton(
           icon: const Icon(Icons.notifications, color: Color(0xFFFFF4D6)),
-          onPressed: () {
-            setState(() => showNotifications = true);
-            Scaffold.of(context).openEndDrawer();
-          },
+          onPressed: () => Scaffold.of(context).openEndDrawer(),
         ),
         if (unreadCount > 0)
           Positioned(
@@ -253,12 +273,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         onChanged: (value) => setState(() => searchQuery = value),
         decoration: InputDecoration(
           hintText: activeTab == 0 ? 'Search districts...' : 'Search name or phone...',
-          hintStyle: const TextStyle(color: Color(0xFF4A1010), fontSize: 14),
           prefixIcon: const Icon(Icons.search, color: Color(0xFF6D1B1B)),
           filled: true,
-          fillColor: const Color(0xFFFFFBF2),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xFFB8962E))),
-          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xFFD4AF37), width: 2)),
+          fillColor: Colors.white,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+          
         ),
       ),
     );
@@ -274,7 +293,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
-          color: isActive ? const Color(0xFFD4AF37) : const Color(0xFFB8962E).withOpacity(0.3),
+          color: isActive ? const Color(0xFFD4AF37) : Colors.white.withOpacity(0.1),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Row(
@@ -291,32 +310,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildDistrictsList() {
     final filtered = districts.where((d) => d['name'].toString().toLowerCase().contains(searchQuery.toLowerCase())).toList();
-    if (filtered.isEmpty) return const Center(child: Text("No districts found"));
-
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       itemCount: filtered.length,
       itemBuilder: (context, index) {
         final district = filtered[index];
+        final int newReq = district['newRequests'];
         return Card(
-          color: Colors.white,
-          elevation: (district['newRequests'] ?? 0) > 0 ? 4 : 1,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           margin: const EdgeInsets.only(bottom: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           child: ListTile(
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DistrictPlacesScreen(districtId: district['id']))),
-            title: Text(district['name'], style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF4A1010))),
-            subtitle: Text('${district['places']} Places Registered'),
+            title: Text(district['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text('${district['places']} Places'),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if ((district['newRequests'] ?? 0) > 0)
+                if (newReq > 0)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(color: const Color(0xFF6D1B1B), borderRadius: BorderRadius.circular(12)),
-                    child: Text('${district['newRequests']} NEW', style: const TextStyle(color: Color(0xFFFFF4D6), fontSize: 11, fontWeight: FontWeight.bold)),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(color: const Color(0xFF6D1B1B), borderRadius: BorderRadius.circular(8)),
+                    child: Text('$newReq NEW', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                   ),
-                const Icon(Icons.chevron_right, color: Color(0xFFD4AF37)),
+                const Icon(Icons.chevron_right),
               ],
             ),
           ),
@@ -326,95 +342,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildUsersList() {
-    final filtered = users.where((u) => 
-      u['name'].toString().toLowerCase().contains(searchQuery.toLowerCase()) || 
-      u['phone'].toString().toLowerCase().contains(searchQuery.toLowerCase())
-    ).toList();
-
-    if (filtered.isEmpty) return const Center(child: Text("No users found"));
-
+    final filtered = users.where((u) => u['name'].toString().toLowerCase().contains(searchQuery.toLowerCase())).toList();
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       itemCount: filtered.length,
       itemBuilder: (context, index) {
         final user = filtered[index];
         return Card(
-          color: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           margin: const EdgeInsets.only(bottom: 12),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Text(user['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: Color(0xFF4A1010))),
-                              const SizedBox(width: 8),
-                              if (user['isOngoing'] == true) 
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.green.shade50,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: Colors.green.shade700),
-                                  ),
-                                  child: Text("ONGOING", style: TextStyle(color: Colors.green.shade700, fontSize: 10, fontWeight: FontWeight.bold)),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(user['phone'], style: const TextStyle(color: Color(0xFF6D1B1B), fontWeight: FontWeight.bold, fontSize: 14)),
-                        ],
-                      ),
-                    ),
-                    if (user['hasProposal'] == false)
-                      const Text("(No Proposal)", style: TextStyle(color: Colors.grey, fontSize: 11, fontStyle: FontStyle.italic)),
-                  ],
-                ),
-                const Divider(height: 24, thickness: 0.5),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildUserDetailRow(Icons.map, "District: ", user['district']),
-                          const SizedBox(height: 6),
-                          _buildUserDetailRow(Icons.location_city, "Taluk: ", user['taluk']),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => _confirmRemoveUser(user),
-                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 22),
-                    )
-                  ],
-                ),
-              ],
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: ListTile(
+            title: Text(user['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text(user['phone']),
+            trailing: IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.red),
+              onPressed: () => _confirmRemoveUser(user),
             ),
           ),
         );
       },
-    );
-  }
-
-  Widget _buildUserDetailRow(IconData icon, String label, String value) {
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: const Color(0xFFB8962E)),
-        const SizedBox(width: 8),
-        Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-        Expanded(child: Text(value, style: const TextStyle(fontSize: 13, color: Colors.black87), overflow: TextOverflow.ellipsis)),
-      ],
     );
   }
 
@@ -423,7 +369,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Delete User?"),
-        content: Text("Permanently delete ${user['name']}?"),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
           TextButton(
@@ -438,35 +383,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Drawer _buildNotificationsDrawer() {
+  Widget _buildNotificationsDrawer() {
     return Drawer(
-      backgroundColor: const Color(0xFFFFF7E8),
       child: Column(
         children: [
           Container(
-            padding: const EdgeInsets.all(16),
-            decoration: const BoxDecoration(color: Color(0xFF6D1B1B)),
-            child: SafeArea(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Notifications', style: TextStyle(color: Color(0xFFFFF4D6), fontSize: 18, fontWeight: FontWeight.bold)),
-                  IconButton(icon: const Icon(Icons.close, color: Colors.white), onPressed: () => Navigator.pop(context)),
-                ],
-              ),
-            ),
+            height: 100,
+            color: const Color(0xFF6D1B1B),
+            alignment: Alignment.center,
+            child: const Text('Notifications', style: TextStyle(color: Colors.white, fontSize: 18)),
           ),
           Expanded(
-            child: notifications.isEmpty 
-              ? const Center(child: Text("No new updates"))
-              : ListView.builder(
-                  itemCount: notifications.length, 
-                  itemBuilder: (context, index) => ListTile(
-                    leading: const Icon(Icons.info_outline, color: Color(0xFF6D1B1B)),
-                    title: Text(notifications[index]['message']),
-                    subtitle: Text(notifications[index]['time']),
-                  )
-                )
+            child: ListView.builder(
+              itemCount: notifications.length,
+              itemBuilder: (context, index) => ListTile(
+                title: Text(notifications[index]['message']),
+                subtitle: Text(notifications[index]['time']),
+              ),
+            ),
           ),
         ],
       ),
@@ -481,9 +415,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.logout, color: Colors.red), 
-              title: const Text('Logout'), 
-              onTap: () => Navigator.pop(context),
+              leading: const Icon(Icons.logout, color: Colors.red),
+              title: const Text('Logout'),
+              // FIXED: Changed from onPressed to onTap
+              onTap: () {
+                Navigator.pop(context);
+                // Add Logout Logic Here
+              },
             ),
           ],
         ),
