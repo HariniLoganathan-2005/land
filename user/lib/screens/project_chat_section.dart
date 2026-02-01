@@ -2,9 +2,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+
 class ProjectChatSection extends StatefulWidget {
   final String projectId;
   final String currentRole; // 'user' or 'admin'
+
 
   const ProjectChatSection({
     super.key,
@@ -12,33 +14,40 @@ class ProjectChatSection extends StatefulWidget {
     required this.currentRole,
   });
 
+
   @override
   State<ProjectChatSection> createState() => _ProjectChatSectionState();
 }
+
 
 class _ProjectChatSectionState extends State<ProjectChatSection> {
   final TextEditingController _messageController = TextEditingController();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+
   // Colors
   final Color primaryMaroon = const Color(0xFF6A1F1A);
   final Color myBubbleColor = const Color(0xFF8E3D2C);
 
+
   void _sendMessage() async {
     // DEBUG PRINT 1: Did we click it?
     print("--- ATTEMPTING TO SEND MESSAGE ---");
-    
+   
     final text = _messageController.text.trim();
     print("Input Text: '$text'");
     print("Project ID: '${widget.projectId}'");
     print("Role: '${widget.currentRole}'");
+
 
     if (text.isEmpty) {
       print("❌ STOPPING: Text is empty");
       return;
     }
 
-    _messageController.clear(); 
+
+    _messageController.clear();
+
 
     try {
       print("... Sending to Firebase 'project_messages' ...");
@@ -53,6 +62,7 @@ class _ProjectChatSectionState extends State<ProjectChatSection> {
       print("🔥 ERROR: Could not send message. Reason: $e");
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -74,15 +84,18 @@ class _ProjectChatSectionState extends State<ProjectChatSection> {
                 return const Center(child: CircularProgressIndicator());
               }
 
+
               final docs = snapshot.data?.docs ?? [];
               print("Stream updated. Found ${docs.length} messages for this project.");
 
+
               if (docs.isEmpty) {
                 return Center(
-                  child: Text("No messages yet.", 
+                  child: Text("No messages yet.",
                     style: GoogleFonts.poppins(color: Colors.grey)),
                 );
               }
+
 
               return ListView.builder(
                 reverse: true,
@@ -92,8 +105,9 @@ class _ProjectChatSectionState extends State<ProjectChatSection> {
                   final data = docs[index].data() as Map<String, dynamic>;
                   final message = data['message'] ?? '';
                   final role = data['senderRole'] ?? '';
-                  
+                 
                   final isMe = role == widget.currentRole;
+
 
                   return Align(
                     alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,

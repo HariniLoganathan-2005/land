@@ -1,12 +1,13 @@
 import 'dart:io';
+import 'dart:convert'; // Required for JSON decoding
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:http/http.dart' as http; // Added for Cloudinary
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -18,7 +19,11 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final _auth = FirebaseAuth.instance;
   final _firestore = FirebaseFirestore.instance;
-  final _storage = FirebaseStorage.instance;
+
+  // --- CLOUDINARY CONFIGURATION ---
+  // TODO: Replace these with your actual Cloudinary credentials
+  final String _cloudName = "YOUR_CLOUD_NAME_HERE"; 
+  final String _uploadPreset = "YOUR_UPLOAD_PRESET_HERE"; 
 
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
@@ -70,27 +75,73 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  // --- CLOUDINARY UPLOAD FUNCTION ---
+  Future<String?> _uploadToCloudinary(XFile imageFile) async {
+    try {
+      final url = Uri.parse('https://api.cloudinary.com/v1_1/$_cloudName/image/upload');
+      final request = http.MultipartRequest('POST', url);
+
+      request.fields['upload_preset'] = _uploadPreset;
+      
+      if (kIsWeb) {
+        request.files.add(http.MultipartFile.fromBytes(
+          'file',
+          await imageFile.readAsBytes(),
+          filename: 'profile_pic.jpg',
+        ));
+      } else {
+        request.files.add(await http.MultipartFile.fromPath(
+          'file',
+          imageFile.path,
+        ));
+      }
+
+      final response = await request.send();
+      final responseData = await http.Response.fromStream(response);
+
+      if (response.statusCode == 200) {
+        final jsonMap = jsonDecode(responseData.body);
+        return jsonMap['secure_url']; // This is the URL we need
+      } else {
+        debugPrint("Cloudinary Upload Error: ${responseData.body}");
+        return null;
+      }
+    } catch (e) {
+      debugPrint("Error uploading to Cloudinary: $e");
+      return null;
+    }
+  }
+
   Future<void> _pickImage() async {
     try {
-      if (!kIsWeb && await Permission.photos.request().isDenied) return;
+      if (!kIsWeb && await Permission.photos.request().isDenied) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gallery permission is required')));
+        return;
+      }
 
+      // Pick Image
       final picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 50);
       if (picked == null) return;
 
       setState(() => _saving = true);
-      final user = _auth.currentUser!;
-      final ref = _storage.ref().child('profile_images/${user.uid}.jpg');
 
-      if (kIsWeb) {
-        await ref.putData(await picked.readAsBytes(), SettableMetadata(contentType: 'image/jpeg'));
+      // 1. Upload to Cloudinary
+      String? uploadedUrl = await _uploadToCloudinary(picked);
+
+      if (uploadedUrl != null) {
+        final user = _auth.currentUser!;
+        
+        // 2. Save the new URL to Firestore
+        await _firestore.collection('users').doc(user.uid).update({'photoUrl': uploadedUrl});
+
+        setState(() => _photoUrl = uploadedUrl);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile picture updated!')));
       } else {
-        await ref.putFile(File(picked.path));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to upload image')));
       }
 
-      final url = await ref.getDownloadURL();
-      await _firestore.collection('users').doc(user.uid).update({'photoUrl': url});
-
-      setState(() => _photoUrl = url);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
       setState(() => _saving = false);
     }

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -5,9 +6,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
-import 'package:geolocator/geolocator.dart';
 
-import '../widgets/image_picker_widget.dart';
+// IMPORT THE NEW MAP SCREEN
+import 'map_picker_screen.dart'; 
 import '../services/cloudinary_service.dart';
 
 class CreateProjectScreen extends StatefulWidget {
@@ -45,6 +46,9 @@ class FeatureEntry {
 }
 
 class _CreateProjectScreenState extends State<CreateProjectScreen> {
+  // TODO: Replace with your actual Mapbox Public Key
+  final String _mapboxApiKey = "pk.eyJ1Ijoic3dldGhhLTEyNiIsImEiOiJjbWw0MGl4Z3kwdmtrM2RzZDA5YWVoNGFiIn0.qfcnOUytMfXOuLDHzV_r7g";
+
   final _pageController = PageController();
   int _currentPage = 0;
 
@@ -52,16 +56,17 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
   final TextEditingController _nearbyTownController = TextEditingController();
   final TextEditingController _talukController = TextEditingController();
   final TextEditingController _districtController = TextEditingController();
-  final TextEditingController _stateController =
-      TextEditingController(text: "Tamil Nadu");
+  final TextEditingController _stateController = TextEditingController(text: "Tamil Nadu");
   final TextEditingController _mapLocationController = TextEditingController();
   final TextEditingController _contactNameController = TextEditingController();
   final TextEditingController _contactPhoneController = TextEditingController();
-  final TextEditingController _estimatedAmountController =
-      TextEditingController();
+  final TextEditingController _estimatedAmountController = TextEditingController();
 
   DateTime? _selectedDate;
+  
   List<String> _selectedImages = [];
+  final ImagePicker _picker = ImagePicker();
+
   bool _isLoading = false;
   String _aadharNumber = "N/A";
 
@@ -71,6 +76,7 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
     {'name': '4 feet', 'amount': 100000},
   ];
 
+  // (Keeping your district list as is)
   final List<String> _tnDistricts = [
     'Ariyalur', 'Chengalpattu', 'Chennai', 'Coimbatore', 'Cuddalore',
     'Dharmapuri', 'Dindigul', 'Erode', 'Kallakurichi', 'Kancheepuram',
@@ -82,47 +88,86 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
     'Vellore', 'Viluppuram', 'Virudhunagar'
   ];
 
-  final Map<String, List<String>> _districtTaluks = {
-    'Ariyalur': ['Ariyalur', 'Sendurai', 'Udayarpalayam', 'Andimadam'],
-    'Chengalpattu': ['Chengalpattu', 'Cheyyur', 'Madurantakam', 'Pallavaram', 'Tambaram', 'Tiruporur', 'Vandalur', 'Thirukalukundram'],
-    'Chennai': ['Ayanavaram', 'Egmore', 'Guindy', 'Mylapore', 'Perambur', 'Tondiarpet', 'Velachery', 'Madhavaram', 'Ambattur', 'Sholinganallur'],
-    'Coimbatore': ['Coimbatore North', 'Coimbatore South', 'Pollachi', 'Mettupalayam', 'Annur', 'Sulur', 'Valparai', 'Perur', 'Madukkarai'],
-    'Cuddalore': ['Cuddalore', 'Panruti', 'Chidambaram', 'Virudhachalam', 'Tittakudi', 'Kurinjipadi', 'Bhuvanagiri', 'Srimushnam'],
-    'Dharmapuri': ['Dharmapuri', 'Harur', 'Pappireddipatti', 'Pennagaram', 'Palacode', 'Nallampalli', 'Karimangalam'],
-    'Dindigul': ['Dindigul East', 'Dindigul West', 'Palani', 'Oddanchatram', 'Kodaikanal', 'Natham', 'Nilakottai', 'Vedasandur', 'Gujiliamparai'],
-    'Erode': ['Erode', 'Perundurai', 'Bhavani', 'Gobichettipalayam', 'Sathyamangalam', 'Anthiyur', 'Kodumudi', 'Modakkurichi', 'Thalavadi'],
-    'Kallakurichi': ['Kallakurichi', 'Sankarapuram', 'Chinnasalem', 'Tirukkoilur', 'Ulundurpet', 'Kalvarayan Hills'],
-    'Kancheepuram': ['Kancheepuram', 'Sriperumbudur', 'Uthiramerur', 'Walajabad', 'Kundrathur'],
-    'Kanniyakumari': ['Agastheeswaram', 'Thovalai', 'Kalkulam', 'Vilavancode', 'Killiyur', 'Thiruvattar'],
-    'Karur': ['Karur', 'Aravakurichi', 'Manmangalam', 'Pugalur', 'Kulithalai', 'Krishnarayapuram', 'Kadavur'],
-    'Krishnagiri': ['Krishnagiri', 'Hosur', 'Pochampalli', 'Uthangarai', 'Denkanikottai', 'Shoolagiri', 'Bargur', 'Anchetti'],
-    'Madurai': ['Madurai North', 'Madurai South', 'Madurai West', 'Madurai East', 'Melur', 'Vadipatti', 'Usilampatti', 'Peraiyur', 'Thirumangalam', 'Thirupparankundram'],
-    'Mayiladuthurai': ['Mayiladuthurai', 'Sirkazhi', 'Tharangambadi', 'Kuthalam'],
-    'Nagapattinam': ['Nagapattinam', 'Kilvelur', 'Vedaranyam', 'Thirukkuvalai'],
-    'Namakkal': ['Namakkal', 'Rasipuram', 'Tiruchengode', 'Paramathi Velur', 'Sendamangalam', 'Kolli Hills', 'Mohanur', 'Kumarapalayam'],
-    'Nilgiris': ['Udhagamandalam', 'Coonoor', 'Kotagiri', 'Gudalur', 'Pandalur', 'Kundah'],
-    'Perambalur': ['Perambalur', 'Kunnam', 'Alathur', 'Veppanthattai'],
-    'Pudukkottai': ['Pudukkottai', 'Alangudi', 'Aranthangi', 'Gandarvakottai', 'Karambakudi', 'Kulathur', 'Illuppur', 'Ponnamaravathi', 'Thirumayam', 'Avudaiyarkoil', 'Manamelkudi'],
-    'Ramanathapuram': ['Ramanathapuram', 'Rameswaram', 'Tiruvadanai', 'Paramakudi', 'Mudukulathur', 'Kadaladi', 'Kamuthi', 'Rajasingamangalam', 'Keelakarai'],
-    'Ranipet': ['Ranipet', 'Walajah', 'Arcot', 'Nemili', 'Arakkonam', 'Sholinghur'],
-    'Salem': ['Salem', 'Salem South', 'Salem West', 'Attur', 'Mettur', 'Omalur', 'Sankari', 'Vazhapadi', 'Gangavalli', 'Edappadi', 'Kadayampatti', 'Pethanaickenpalayam'],
-    'Sivagangai': ['Sivagangai', 'Karaikudi', 'Devakottai', 'Manamadurai', 'Ilayangudi', 'Thiruppuvanam', 'Kalayarkoil', 'Tiruppathur', 'Singampunari'],
-    'Tenkasi': ['Tenkasi', 'Sengottai', 'Kadayanallur', 'Sivagiri', 'Sankarankovil', 'Thiruvengadam', 'Alangulam', 'V.K.Pudur'],
-    'Thanjavur': ['Thanjavur', 'Kumbakonam', 'Papanasam', 'Pattukkottai', 'Peravurani', 'Orathanadu', 'Thiruvaiyaru', 'Thiruvidaimarudur', 'Budalur'],
-    'Theni': ['Theni', 'Periyakulam', 'Bodinayakanur', 'Uthamapalayam', 'Andipatti'],
-    'Thoothukudi': ['Thoothukudi', 'Srivaikuntam', 'Tiruchendur', 'Sathankulam', 'Eral', 'Ettayapuram', 'Kovilpatti', 'Ottapidaram', 'Vilathikulam', 'Kayathar'],
-    'Tiruchirappalli': ['Tiruchirappalli East', 'Tiruchirappalli West', 'Srirangam', 'Lalgudi', 'Manachanallur', 'Musiri', 'Thuraiyur', 'Thottiyam', 'Manapparai', 'Marungapuri'],
-    'Tirunelveli': ['Tirunelveli', 'Palayamkottai', 'Ambasamudram', 'Cheranmahadevi', 'Radhapuram', 'Nanguneri', 'Tisayanvilai'],
-    'Tirupathur': ['Tirupathur', 'Vaniyambadi', 'Ambur', 'Natrampalli'],
-    'Tiruppur': ['Tiruppur North', 'Tiruppur South', 'Avinashi', 'Dharapuram', 'Kangeyam', 'Udumalaipettai', 'Palladam', 'Madathukulam', 'Uthukuli'],
-    'Tiruvallur': ['Tiruvallur', 'Avadi', 'Poonamallee', 'Ponneri', 'Gummidipoondi', 'Uthukottai', 'Tiruttani', 'Pallipattu', 'R.K. Pet'],
-    'Tiruvannamalai': ['Tiruvannamalai', 'Arni', 'Cheyyar', 'Vandavasi', 'Polur', 'Chengam', 'Thandarampattu', 'Kalasapakkam', 'Jawadhu Hills', 'Kilpennathur', 'Chetpet', 'Jamunamarathur'],
-    'Tiruvarur': ['Tiruvarur', 'Mannargudi', 'Nannilam', 'Thiruthuraipoondi', 'Needamangalam', 'Kodavasal', 'Valangaiman', 'Koothanallur'],
-    'Vellore': ['Vellore', 'Katpadi', 'Gudiyatham', 'Anaicut', 'Kaveripakkam', 'Pernambut'],
-    'Viluppuram': ['Viluppuram', 'Vikravandi', 'Vanur', 'Gingee', 'Marakkanam', 'Kandachipuram', 'Thiruvennainallur'],
-    'Virudhunagar': ['Virudhunagar', 'Sivakasi', 'Srivilliputhur', 'Rajapalayam', 'Aruppukkottai', 'Sattur', 'Tiruchuli', 'Kariapatti', 'Watrap'],
-  };
+ final Map<String, List<String>> _districtTaluks = {
 
+    'Ariyalur': ['Ariyalur', 'Sendurai', 'Udayarpalayam', 'Andimadam'],
+
+    'Chengalpattu': ['Chengalpattu', 'Cheyyur', 'Madurantakam', 'Pallavaram', 'Tambaram', 'Tiruporur', 'Vandalur', 'Thirukalukundram'],
+
+    'Chennai': ['Ayanavaram', 'Egmore', 'Guindy', 'Mylapore', 'Perambur', 'Tondiarpet', 'Velachery', 'Madhavaram', 'Ambattur', 'Sholinganallur'],
+
+    'Coimbatore': ['Coimbatore North', 'Coimbatore South', 'Pollachi', 'Mettupalayam', 'Annur', 'Sulur', 'Valparai', 'Perur', 'Madukkarai'],
+
+    'Cuddalore': ['Cuddalore', 'Panruti', 'Chidambaram', 'Virudhachalam', 'Tittakudi', 'Kurinjipadi', 'Bhuvanagiri', 'Srimushnam'],
+
+    'Dharmapuri': ['Dharmapuri', 'Harur', 'Pappireddipatti', 'Pennagaram', 'Palacode', 'Nallampalli', 'Karimangalam'],
+
+    'Dindigul': ['Dindigul East', 'Dindigul West', 'Palani', 'Oddanchatram', 'Kodaikanal', 'Natham', 'Nilakottai', 'Vedasandur', 'Gujiliamparai'],
+
+    'Erode': ['Erode', 'Perundurai', 'Bhavani', 'Gobichettipalayam', 'Sathyamangalam', 'Anthiyur', 'Kodumudi', 'Modakkurichi', 'Thalavadi'],
+
+    'Kallakurichi': ['Kallakurichi', 'Sankarapuram', 'Chinnasalem', 'Tirukkoilur', 'Ulundurpet', 'Kalvarayan Hills'],
+
+    'Kancheepuram': ['Kancheepuram', 'Sriperumbudur', 'Uthiramerur', 'Walajabad', 'Kundrathur'],
+
+    'Kanniyakumari': ['Agastheeswaram', 'Thovalai', 'Kalkulam', 'Vilavancode', 'Killiyur', 'Thiruvattar'],
+
+    'Karur': ['Karur', 'Aravakurichi', 'Manmangalam', 'Pugalur', 'Kulithalai', 'Krishnarayapuram', 'Kadavur'],
+
+    'Krishnagiri': ['Krishnagiri', 'Hosur', 'Pochampalli', 'Uthangarai', 'Denkanikottai', 'Shoolagiri', 'Bargur', 'Anchetti'],
+
+    'Madurai': ['Madurai North', 'Madurai South', 'Madurai West', 'Madurai East', 'Melur', 'Vadipatti', 'Usilampatti', 'Peraiyur', 'Thirumangalam', 'Thirupparankundram'],
+
+    'Mayiladuthurai': ['Mayiladuthurai', 'Sirkazhi', 'Tharangambadi', 'Kuthalam'],
+
+    'Nagapattinam': ['Nagapattinam', 'Kilvelur', 'Vedaranyam', 'Thirukkuvalai'],
+
+    'Namakkal': ['Namakkal', 'Rasipuram', 'Tiruchengode', 'Paramathi Velur', 'Sendamangalam', 'Kolli Hills', 'Mohanur', 'Kumarapalayam'],
+
+    'Nilgiris': ['Udhagamandalam', 'Coonoor', 'Kotagiri', 'Gudalur', 'Pandalur', 'Kundah'],
+
+    'Perambalur': ['Perambalur', 'Kunnam', 'Alathur', 'Veppanthattai'],
+
+    'Pudukkottai': ['Pudukkottai', 'Alangudi', 'Aranthangi', 'Gandarvakottai', 'Karambakudi', 'Kulathur', 'Illuppur', 'Ponnamaravathi', 'Thirumayam', 'Avudaiyarkoil', 'Manamelkudi'],
+
+    'Ramanathapuram': ['Ramanathapuram', 'Rameswaram', 'Tiruvadanai', 'Paramakudi', 'Mudukulathur', 'Kadaladi', 'Kamuthi', 'Rajasingamangalam', 'Keelakarai'],
+
+    'Ranipet': ['Ranipet', 'Walajah', 'Arcot', 'Nemili', 'Arakkonam', 'Sholinghur'],
+
+    'Salem': ['Salem', 'Salem South', 'Salem West', 'Attur', 'Mettur', 'Omalur', 'Sankari', 'Vazhapadi', 'Gangavalli', 'Edappadi', 'Kadayampatti', 'Pethanaickenpalayam'],
+
+    'Sivagangai': ['Sivagangai', 'Karaikudi', 'Devakottai', 'Manamadurai', 'Ilayangudi', 'Thiruppuvanam', 'Kalayarkoil', 'Tiruppathur', 'Singampunari'],
+
+    'Tenkasi': ['Tenkasi', 'Sengottai', 'Kadayanallur', 'Sivagiri', 'Sankarankovil', 'Thiruvengadam', 'Alangulam', 'V.K.Pudur'],
+
+    'Thanjavur': ['Thanjavur', 'Kumbakonam', 'Papanasam', 'Pattukkottai', 'Peravurani', 'Orathanadu', 'Thiruvaiyaru', 'Thiruvidaimarudur', 'Budalur'],
+
+    'Theni': ['Theni', 'Periyakulam', 'Bodinayakanur', 'Uthamapalayam', 'Andipatti'],
+
+    'Thoothukudi': ['Thoothukudi', 'Srivaikuntam', 'Tiruchendur', 'Sathankulam', 'Eral', 'Ettayapuram', 'Kovilpatti', 'Ottapidaram', 'Vilathikulam', 'Kayathar'],
+
+    'Tiruchirappalli': ['Tiruchirappalli East', 'Tiruchirappalli West', 'Srirangam', 'Lalgudi', 'Manachanallur', 'Musiri', 'Thuraiyur', 'Thottiyam', 'Manapparai', 'Marungapuri'],
+
+    'Tirunelveli': ['Tirunelveli', 'Palayamkottai', 'Ambasamudram', 'Cheranmahadevi', 'Radhapuram', 'Nanguneri', 'Tisayanvilai'],
+
+    'Tirupathur': ['Tirupathur', 'Vaniyambadi', 'Ambur', 'Natrampalli'],
+
+    'Tiruppur': ['Tiruppur North', 'Tiruppur South', 'Avinashi', 'Dharapuram', 'Kangeyam', 'Udumalaipettai', 'Palladam', 'Madathukulam', 'Uthukuli'],
+
+    'Tiruvallur': ['Tiruvallur', 'Avadi', 'Poonamallee', 'Ponneri', 'Gummidipoondi', 'Uthukottai', 'Tiruttani', 'Pallipattu', 'R.K. Pet'],
+
+    'Tiruvannamalai': ['Tiruvannamalai', 'Arni', 'Cheyyar', 'Vandavasi', 'Polur', 'Chengam', 'Thandarampattu', 'Kalasapakkam', 'Jawadhu Hills', 'Kilpennathur', 'Chetpet', 'Jamunamarathur'],
+
+    'Tiruvarur': ['Tiruvarur', 'Mannargudi', 'Nannilam', 'Thiruthuraipoondi', 'Needamangalam', 'Kodavasal', 'Valangaiman', 'Koothanallur'],
+
+    'Vellore': ['Vellore', 'Katpadi', 'Gudiyatham', 'Anaicut', 'Kaveripakkam', 'Pernambut'],
+
+    'Viluppuram': ['Viluppuram', 'Vikravandi', 'Vanur', 'Gingee', 'Marakkanam', 'Kandachipuram', 'Thiruvennainallur'],
+
+    'Virudhunagar': ['Virudhunagar', 'Sivakasi', 'Srivilliputhur', 'Rajapalayam', 'Aruppukkottai', 'Sattur', 'Tiruchuli', 'Kariapatti', 'Watrap'],
+
+  };
+  
   late List<FeatureEntry> _features;
   FeatureEntry? _selectedFeatureEntry;
 
@@ -158,12 +203,66 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
     }
   }
 
+  // --- NEW: Map Picker Integration ---
+  Future<void> _openMapPicker() async {
+    // Navigate to MapPickerScreen
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => MapPickerScreen(mapboxApiKey: _mapboxApiKey),
+      ),
+    );
+
+    // Handle returned data
+    if (result != null && result is Map) {
+      setState(() {
+        _mapLocationController.text = "${result['lat'].toStringAsFixed(6)}, ${result['lng'].toStringAsFixed(6)}";
+        
+        if (result['place'] != null) _placeController.text = result['place'];
+        if (result['district'] != null) _districtController.text = result['district'];
+        if (result['state'] != null) _stateController.text = result['state'];
+        
+        // Clear taluk to force user to re-select based on new district
+        _talukController.clear();
+      });
+    }
+  }
+  // -----------------------------------
+
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      if (source == ImageSource.gallery) {
+        final List<XFile> images = await _picker.pickMultiImage(imageQuality: 70);
+        if (images.isNotEmpty) {
+          setState(() {
+            _selectedImages.addAll(images.map((e) => e.path));
+          });
+        }
+      } else {
+        final XFile? image = await _picker.pickImage(source: source, imageQuality: 70);
+        if (image != null) {
+          setState(() {
+            _selectedImages.add(image.path);
+          });
+        }
+      }
+    } catch (e) {
+      _showWarning('Failed to pick image: $e');
+    }
+  }
+
+  void _removeImage(int index) {
+    setState(() {
+      _selectedImages.removeAt(index);
+    });
+  }
+
   bool _validateCurrentPage() {
     if (_currentPage == 0) {
       if (_placeController.text.trim().isEmpty) return _showWarning('Place name is required');
       if (_districtController.text.trim().isEmpty) return _showWarning('District is required');
       if (_talukController.text.trim().isEmpty) return _showWarning('Taluk is required');
-      if (_mapLocationController.text.trim().isEmpty) return _showWarning('Please capture GPS coordinates');
+      if (_mapLocationController.text.trim().isEmpty) return _showWarning('Please pick a location on map');
       if (_selectedDate == null) return _showWarning('Please select a visit date');
       return true;
     }
@@ -174,7 +273,6 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
         return _showWarning('Please select at least one structure to be NEW to proceed.');
       }
 
-      // FIX: Check if every "new" feature has a dimension and amount selected
       for (var feature in _features) {
         if (feature.condition == 'new') {
           if (feature.dimension == null) {
@@ -205,45 +303,6 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
       SnackBar(content: Text(msg), backgroundColor: const Color(0xFFB71C1C), behavior: SnackBarBehavior.floating),
     );
     return false;
-  }
-
-  Future<void> _detectAndFillLocation() async {
-    setState(() => _isLoading = true);
-    try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        setState(() => _isLoading = false);
-        _showWarning("Location services are disabled. Please enable GPS.");
-        await Geolocator.openLocationSettings();
-        return;
-      }
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) {
-          setState(() => _isLoading = false);
-          _showWarning("Location permissions are denied.");
-          return;
-        }
-      }
-      if (permission == LocationPermission.deniedForever) {
-        setState(() => _isLoading = false);
-        _showWarning("Location permissions are permanently denied. Open settings to allow.");
-        await Geolocator.openAppSettings();
-        return;
-      }
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.best,
-        timeLimit: const Duration(seconds: 15),
-      );
-      setState(() {
-        _mapLocationController.text = "${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}";
-      });
-    } catch (e) {
-      _showWarning("Timeout or Error fetching location. Try again.");
-    } finally {
-      setState(() => _isLoading = false);
-    }
   }
 
   Future<void> _createProject() async {
@@ -321,6 +380,8 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
           _buildDistrictAutocomplete(),
           _buildTalukAutocomplete(),
           _plainTextField(_stateController, 'State', readOnly: true),
+          
+          // --- UPDATED MAP ROW ---
           Row(
             children: [
               Expanded(child: _plainTextField(_mapLocationController, 'Map Location', readOnly: true)),
@@ -329,14 +390,15 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
                 margin: const EdgeInsets.only(bottom: 12),
                 decoration: BoxDecoration(color: const Color(0xFF5D4037), borderRadius: BorderRadius.circular(10)),
                 child: IconButton(
-                  icon: _isLoading 
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Icon(Icons.my_location, color: Colors.white), 
-                  onPressed: _isLoading ? null : _detectAndFillLocation
+                  icon: const Icon(Icons.map_outlined, color: Colors.white), 
+                  onPressed: _openMapPicker, // Calls the map screen
+                  tooltip: "Pick Location on Map",
                 ),
               ),
             ],
           ),
+          // -----------------------
+          
           InkWell(onTap: () => _selectDate(context), child: _dateField()),
         ],
       ),
@@ -522,13 +584,88 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
       const SizedBox(height: 20),
       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
         Text('Site Photos', style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold)),
-        Text('(At least 5 required)', style: GoogleFonts.poppins(fontSize: 12, color: Colors.red, fontWeight: FontWeight.w500))
+        Text('(${_selectedImages.length} / 5 min)', style: GoogleFonts.poppins(fontSize: 12, color: _selectedImages.length < 5 ? Colors.red : Colors.green, fontWeight: FontWeight.w500))
       ]),
       const SizedBox(height: 12),
-      ImagePickerWidget(
-        maxImages: 10, 
-        onImagesSelected: (imgs) => setState(() => _selectedImages = imgs)
-      )
+      
+      // Image Preview Section
+      if (_selectedImages.isNotEmpty)
+        SizedBox(
+          height: 100,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: _selectedImages.length,
+            itemBuilder: (context, index) {
+              return Stack(
+                children: [
+                  Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    width: 100,
+                    height: 100,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFF5D4037)),
+                      image: DecorationImage(
+                        image: FileImage(File(_selectedImages[index])),
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 0,
+                    right: 8,
+                    child: InkWell(
+                      onTap: () => _removeImage(index),
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                        child: const Icon(Icons.close, size: 16, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      
+      const SizedBox(height: 12),
+
+      // Camera & Gallery Buttons
+      Row(
+        children: [
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: () => _pickImage(ImageSource.camera),
+              icon: const Icon(Icons.camera_alt),
+              label: const Text("Take Photo"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF5D4037),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () => _pickImage(ImageSource.gallery),
+              icon: const Icon(Icons.photo_library),
+              label: const Text("Gallery"),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF5D4037),
+                side: const BorderSide(color: Color(0xFF5D4037)),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+        ],
+      ),
+      if (_selectedImages.length < 5)
+        Padding(
+          padding: const EdgeInsets.only(top: 8.0),
+          child: Text("Please select at least ${5 - _selectedImages.length} more images.", style: const TextStyle(color: Colors.red, fontSize: 11)),
+        ),
     ]));
   }
 
