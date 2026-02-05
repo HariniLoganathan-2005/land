@@ -162,7 +162,6 @@ class _OngoingTempleDetailScreenState
     );
   }
 
-  // NEW: mark whole project as completed
   Future<void> _markProjectCompleted() async {
     final bool? confirm = await showDialog<bool>(
       context: context,
@@ -191,11 +190,11 @@ class _OngoingTempleDetailScreenState
 
     try {
       final String projectId = temple['id'] ?? temple['projectId'];
-      if (projectId == null || projectId.toString().isEmpty) return;
+      if (projectId.isEmpty) return;
 
       await FirebaseFirestore.instance
           .collection('projects')
-          .doc(projectId.toString())
+          .doc(projectId)
           .update({
         'status': 'completed',
         'progress': 100,
@@ -270,37 +269,44 @@ class _OngoingTempleDetailScreenState
               children: [
                 _buildTab('Activities', 0),
                 _buildTab('Finances', 1),
-                _buildTab('Payment Process', 2),
+                _buildTab('Payment', 2),
                 _buildTab('Feedback', 3),
               ],
             ),
           ),
 
-          // NEW: Complete project button
-          Container(
-            width: double.infinity,
-            color: Colors.white,
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: ElevatedButton.icon(
-              onPressed: _markProjectCompleted,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green[700],
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-              icon: const Icon(Icons.flag),
-              label: const Text(
-                'Mark Project as Completed',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-          ),
-
           Expanded(child: _buildCurrentTabContent()),
         ],
+      ),
+      bottomNavigationBar: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              offset: const Offset(0, -4),
+              blurRadius: 10,
+            ),
+          ],
+        ),
+        child: ElevatedButton.icon(
+          onPressed: _markProjectCompleted,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: primaryMaroon,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            elevation: 2,
+          ),
+          icon: const Icon(Icons.check_circle_outline),
+          label: const Text(
+            'Mark Project as Completed',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+        ),
       ),
     );
   }
@@ -712,115 +718,177 @@ class _OngoingTempleDetailScreenState
     );
   }
 
+  // --- UPDATED: Uses 'estimatedAmount' instead of 'budget' ---
   Widget _buildPaymentProcessTab() {
-    return ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        const Text(
-          'Budget Utilization',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: darkMaroonText,
-          ),
-        ),
-        const SizedBox(height: 20),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey.shade300),
-          ),
-          child: Column(
-            children: [
-              Row(
-                mainAxisAlignment:
-                    MainAxisAlignment.spaceBetween,
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('bills')
+          .where('projectId', isEqualTo: temple['id'])
+          .snapshots(),
+      builder: (context, snapshot) {
+        double totalBillsAmount = 0.0;
+        List<QueryDocumentSnapshot> billDocs = [];
+
+        if (snapshot.hasData) {
+          billDocs = snapshot.data!.docs;
+          for (var doc in billDocs) {
+            final data = doc.data() as Map<String, dynamic>;
+            final amount = double.tryParse(data['amount'].toString()) ?? 0.0;
+            totalBillsAmount += amount;
+          }
+        }
+
+        // --- CHANGED HERE: Use 'estimatedAmount' ---
+        final sanctionedAmount =
+            double.tryParse(temple['estimatedAmount'].toString()) ?? 1.0; 
+
+        final double progress = (totalBillsAmount / sanctionedAmount).clamp(0.0, 1.0);
+
+        return ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            const Text(
+              'Budget Utilization',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: darkMaroonText,
+              ),
+            ),
+            const SizedBox(height: 20),
+            
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade300),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    offset: const Offset(0, 2),
+                    blurRadius: 5,
+                  )
+                ],
+              ),
+              child: Column(
                 children: [
-                  const Text('Total Budget',
-                      style: TextStyle(color: Colors.grey)),
-                  Text(
-                    '₹${temple['budget'] ?? '0'}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: primaryMaroon,
+                  Row(
+                    mainAxisAlignment:
+                        MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Sanctioned Budget',
+                          style: TextStyle(color: Colors.grey)),
+                      // --- CHANGED HERE: Display 'estimatedAmount' ---
+                      Text(
+                        '₹${temple['estimatedAmount'] ?? '0'}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: primaryMaroon,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment:
+                        MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Utilized (Bills)',
+                          style: TextStyle(color: Colors.grey)),
+                      Text(
+                        '₹${totalBillsAmount.toStringAsFixed(2)}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey[800],
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: progress,
+                      backgroundColor: backgroundCream,
+                      color: progress > 0.9 ? Colors.red : primaryGold,
+                      minHeight: 10,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      "${(progress * 100).toStringAsFixed(1)}% Used",
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              const LinearProgressIndicator(
-                value: 0.6,
-                backgroundColor: backgroundCream,
-                color: primaryGold,
-                minHeight: 8,
+            ),
+            
+            const SizedBox(height: 24),
+            const Text(
+              'Bills Uploaded',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: darkMaroonText,
               ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 24),
-        const Text(
-          'Bills Uploaded',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: darkMaroonText,
-          ),
-        ),
-        const SizedBox(height: 12),
-        StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('bills')
-              .where('projectId', isEqualTo: temple['id'])
-              .snapshots(),
-          builder: (context, snapshot) {
-            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-              return Container(
+            ),
+            const SizedBox(height: 12),
+            
+            if (!snapshot.hasData)
+               const Center(child: CircularProgressIndicator())
+            else if (billDocs.isEmpty)
+              Container(
                 padding: const EdgeInsets.all(20),
                 child: const Center(child: Text("No bills found.")),
-              );
-            }
-            return Column(
-              children: snapshot.data!.docs.map((doc) {
-                final bill = doc.data() as Map<String, dynamic>;
-                List<dynamic> images = bill['imageUrls'] ?? [];
-                return Card(
-                  child: ExpansionTile(
-                    title: Text(
-                      bill['title'] ?? 'Bill',
-                      style:
-                          const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: Text(
-                      '₹${bill['amount']}',
-                      style: const TextStyle(color: Colors.green),
-                    ),
-                    children: [
-                      if (images.isNotEmpty)
-                        SizedBox(
-                          height: 100,
-                          child: ListView.builder(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: images.length,
-                            itemBuilder: (ctx, i) => Padding(
-                              padding: const EdgeInsets.all(8.0),
-                              child: GestureDetector(
-                                onTap: () =>
-                                    _showFullScreenImage(images[i]),
-                                child: Image.network(images[i]),
+              )
+            else
+              Column(
+                children: billDocs.map((doc) {
+                  final bill = doc.data() as Map<String, dynamic>;
+                  List<dynamic> images = bill['imageUrls'] ?? [];
+                  return Card(
+                    child: ExpansionTile(
+                      title: Text(
+                        bill['title'] ?? 'Bill',
+                        style:
+                            const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Text(
+                        '₹${bill['amount']}',
+                        style: const TextStyle(color: Colors.green),
+                      ),
+                      children: [
+                        if (images.isNotEmpty)
+                          SizedBox(
+                            height: 100,
+                            child: ListView.builder(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: images.length,
+                              itemBuilder: (ctx, i) => Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: GestureDetector(
+                                  onTap: () =>
+                                      _showFullScreenImage(images[i]),
+                                  child: Image.network(images[i]),
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                    ],
-                  ),
-                );
-              }).toList(),
-            );
-          },
-        ),
-      ],
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+          ],
+        );
+      },
     );
   }
 }

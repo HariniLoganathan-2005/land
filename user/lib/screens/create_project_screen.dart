@@ -7,7 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
-// IMPORT THE NEW MAP SCREEN
+// IMPORT THE NEW MAP SCREEN (Ensure these files exist in your project)
 import 'map_picker_screen.dart'; 
 import '../services/cloudinary_service.dart';
 
@@ -52,14 +52,18 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
   final _pageController = PageController();
   int _currentPage = 0;
 
+  // -- CONTROLLERS --
+  
+  // Step 1: Location
   final TextEditingController _placeController = TextEditingController();
-  final TextEditingController _nearbyTownController = TextEditingController();
   final TextEditingController _talukController = TextEditingController();
   final TextEditingController _districtController = TextEditingController();
   final TextEditingController _stateController = TextEditingController(text: "Tamil Nadu");
   final TextEditingController _mapLocationController = TextEditingController();
-  final TextEditingController _contactNameController = TextEditingController();
-  final TextEditingController _contactPhoneController = TextEditingController();
+  
+  // Step 3: Contact & Details
+  final TextEditingController _localPersonNameController = TextEditingController(); 
+  final TextEditingController _localPersonPhoneController = TextEditingController();
   final TextEditingController _estimatedAmountController = TextEditingController();
 
   DateTime? _selectedDate;
@@ -68,15 +72,21 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
   final ImagePicker _picker = ImagePicker();
 
   bool _isLoading = false;
-  String _aadharNumber = "N/A";
 
+  // Standard dimensions for Lingam, Nandhi, Avudai
   final List<Map<String, dynamic>> _predefinedDimensions = [
     {'name': '2 feet', 'amount': 50000},
     {'name': '3 feet', 'amount': 75000},
     {'name': '4 feet', 'amount': 100000},
   ];
 
-  // (Keeping your district list as is)
+  // Specific dimensions for Shed
+  final List<Map<String, dynamic>> _shedDimensions = [
+    {'name': '6 feet', 'amount': 150000},
+    {'name': '8 feet', 'amount': 200000},
+    {'name': '10 feet', 'amount': 250000},
+  ];
+
   final List<String> _tnDistricts = [
     'Ariyalur', 'Chengalpattu', 'Chennai', 'Coimbatore', 'Cuddalore',
     'Dharmapuri', 'Dindigul', 'Erode', 'Kallakurichi', 'Kancheepuram',
@@ -89,83 +99,44 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
   ];
 
  final Map<String, List<String>> _districtTaluks = {
-
     'Ariyalur': ['Ariyalur', 'Sendurai', 'Udayarpalayam', 'Andimadam'],
-
     'Chengalpattu': ['Chengalpattu', 'Cheyyur', 'Madurantakam', 'Pallavaram', 'Tambaram', 'Tiruporur', 'Vandalur', 'Thirukalukundram'],
-
     'Chennai': ['Ayanavaram', 'Egmore', 'Guindy', 'Mylapore', 'Perambur', 'Tondiarpet', 'Velachery', 'Madhavaram', 'Ambattur', 'Sholinganallur'],
-
     'Coimbatore': ['Coimbatore North', 'Coimbatore South', 'Pollachi', 'Mettupalayam', 'Annur', 'Sulur', 'Valparai', 'Perur', 'Madukkarai'],
-
     'Cuddalore': ['Cuddalore', 'Panruti', 'Chidambaram', 'Virudhachalam', 'Tittakudi', 'Kurinjipadi', 'Bhuvanagiri', 'Srimushnam'],
-
     'Dharmapuri': ['Dharmapuri', 'Harur', 'Pappireddipatti', 'Pennagaram', 'Palacode', 'Nallampalli', 'Karimangalam'],
-
     'Dindigul': ['Dindigul East', 'Dindigul West', 'Palani', 'Oddanchatram', 'Kodaikanal', 'Natham', 'Nilakottai', 'Vedasandur', 'Gujiliamparai'],
-
     'Erode': ['Erode', 'Perundurai', 'Bhavani', 'Gobichettipalayam', 'Sathyamangalam', 'Anthiyur', 'Kodumudi', 'Modakkurichi', 'Thalavadi'],
-
     'Kallakurichi': ['Kallakurichi', 'Sankarapuram', 'Chinnasalem', 'Tirukkoilur', 'Ulundurpet', 'Kalvarayan Hills'],
-
     'Kancheepuram': ['Kancheepuram', 'Sriperumbudur', 'Uthiramerur', 'Walajabad', 'Kundrathur'],
-
     'Kanniyakumari': ['Agastheeswaram', 'Thovalai', 'Kalkulam', 'Vilavancode', 'Killiyur', 'Thiruvattar'],
-
     'Karur': ['Karur', 'Aravakurichi', 'Manmangalam', 'Pugalur', 'Kulithalai', 'Krishnarayapuram', 'Kadavur'],
-
     'Krishnagiri': ['Krishnagiri', 'Hosur', 'Pochampalli', 'Uthangarai', 'Denkanikottai', 'Shoolagiri', 'Bargur', 'Anchetti'],
-
     'Madurai': ['Madurai North', 'Madurai South', 'Madurai West', 'Madurai East', 'Melur', 'Vadipatti', 'Usilampatti', 'Peraiyur', 'Thirumangalam', 'Thirupparankundram'],
-
     'Mayiladuthurai': ['Mayiladuthurai', 'Sirkazhi', 'Tharangambadi', 'Kuthalam'],
-
     'Nagapattinam': ['Nagapattinam', 'Kilvelur', 'Vedaranyam', 'Thirukkuvalai'],
-
     'Namakkal': ['Namakkal', 'Rasipuram', 'Tiruchengode', 'Paramathi Velur', 'Sendamangalam', 'Kolli Hills', 'Mohanur', 'Kumarapalayam'],
-
     'Nilgiris': ['Udhagamandalam', 'Coonoor', 'Kotagiri', 'Gudalur', 'Pandalur', 'Kundah'],
-
     'Perambalur': ['Perambalur', 'Kunnam', 'Alathur', 'Veppanthattai'],
-
     'Pudukkottai': ['Pudukkottai', 'Alangudi', 'Aranthangi', 'Gandarvakottai', 'Karambakudi', 'Kulathur', 'Illuppur', 'Ponnamaravathi', 'Thirumayam', 'Avudaiyarkoil', 'Manamelkudi'],
-
     'Ramanathapuram': ['Ramanathapuram', 'Rameswaram', 'Tiruvadanai', 'Paramakudi', 'Mudukulathur', 'Kadaladi', 'Kamuthi', 'Rajasingamangalam', 'Keelakarai'],
-
     'Ranipet': ['Ranipet', 'Walajah', 'Arcot', 'Nemili', 'Arakkonam', 'Sholinghur'],
-
     'Salem': ['Salem', 'Salem South', 'Salem West', 'Attur', 'Mettur', 'Omalur', 'Sankari', 'Vazhapadi', 'Gangavalli', 'Edappadi', 'Kadayampatti', 'Pethanaickenpalayam'],
-
     'Sivagangai': ['Sivagangai', 'Karaikudi', 'Devakottai', 'Manamadurai', 'Ilayangudi', 'Thiruppuvanam', 'Kalayarkoil', 'Tiruppathur', 'Singampunari'],
-
     'Tenkasi': ['Tenkasi', 'Sengottai', 'Kadayanallur', 'Sivagiri', 'Sankarankovil', 'Thiruvengadam', 'Alangulam', 'V.K.Pudur'],
-
     'Thanjavur': ['Thanjavur', 'Kumbakonam', 'Papanasam', 'Pattukkottai', 'Peravurani', 'Orathanadu', 'Thiruvaiyaru', 'Thiruvidaimarudur', 'Budalur'],
-
     'Theni': ['Theni', 'Periyakulam', 'Bodinayakanur', 'Uthamapalayam', 'Andipatti'],
-
     'Thoothukudi': ['Thoothukudi', 'Srivaikuntam', 'Tiruchendur', 'Sathankulam', 'Eral', 'Ettayapuram', 'Kovilpatti', 'Ottapidaram', 'Vilathikulam', 'Kayathar'],
-
     'Tiruchirappalli': ['Tiruchirappalli East', 'Tiruchirappalli West', 'Srirangam', 'Lalgudi', 'Manachanallur', 'Musiri', 'Thuraiyur', 'Thottiyam', 'Manapparai', 'Marungapuri'],
-
     'Tirunelveli': ['Tirunelveli', 'Palayamkottai', 'Ambasamudram', 'Cheranmahadevi', 'Radhapuram', 'Nanguneri', 'Tisayanvilai'],
-
     'Tirupathur': ['Tirupathur', 'Vaniyambadi', 'Ambur', 'Natrampalli'],
-
     'Tiruppur': ['Tiruppur North', 'Tiruppur South', 'Avinashi', 'Dharapuram', 'Kangeyam', 'Udumalaipettai', 'Palladam', 'Madathukulam', 'Uthukuli'],
-
     'Tiruvallur': ['Tiruvallur', 'Avadi', 'Poonamallee', 'Ponneri', 'Gummidipoondi', 'Uthukottai', 'Tiruttani', 'Pallipattu', 'R.K. Pet'],
-
     'Tiruvannamalai': ['Tiruvannamalai', 'Arni', 'Cheyyar', 'Vandavasi', 'Polur', 'Chengam', 'Thandarampattu', 'Kalasapakkam', 'Jawadhu Hills', 'Kilpennathur', 'Chetpet', 'Jamunamarathur'],
-
     'Tiruvarur': ['Tiruvarur', 'Mannargudi', 'Nannilam', 'Thiruthuraipoondi', 'Needamangalam', 'Kodavasal', 'Valangaiman', 'Koothanallur'],
-
     'Vellore': ['Vellore', 'Katpadi', 'Gudiyatham', 'Anaicut', 'Kaveripakkam', 'Pernambut'],
-
     'Viluppuram': ['Viluppuram', 'Vikravandi', 'Vanur', 'Gingee', 'Marakkanam', 'Kandachipuram', 'Thiruvennainallur'],
-
     'Virudhunagar': ['Virudhunagar', 'Sivakasi', 'Srivilliputhur', 'Rajapalayam', 'Aruppukkottai', 'Sattur', 'Tiruchuli', 'Kariapatti', 'Watrap'],
-
   };
   
   late List<FeatureEntry> _features;
@@ -174,7 +145,6 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
   @override
   void initState() {
     super.initState();
-    _fetchContractorData();
     _features = [
       FeatureEntry(key: 'lingam', label: 'Lingam'),
       FeatureEntry(key: 'nandhi', label: 'Nandhi'),
@@ -183,29 +153,27 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
     ];
   }
 
-  Future<void> _fetchContractorData() async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-        if (doc.exists && doc.data() != null) {
-          final data = doc.data()!;
-          setState(() {
-            _contactNameController.text = (data['name'] ?? data['fullName'] ?? '').toString();
-            String? fetchedPhone = data['phone']?.toString() ?? data['phoneNumber']?.toString() ?? data['mobile']?.toString();
-            _contactPhoneController.text = fetchedPhone ?? user.phoneNumber ?? '';
-            _aadharNumber = (data['aadhar'] ?? data['aadharNumber'] ?? 'N/A').toString();
-          });
+  // --- NEW: CALCULATION LOGIC ---
+  void _calculateTotalEstimate() {
+    double total = 0;
+    for (var feature in _features) {
+      // Only include New structures
+      if (feature.condition == 'new' && feature.amount != null) {
+        // Safely parse string amount to double
+        double? amount = double.tryParse(feature.amount.toString());
+        if (amount != null) {
+          total += amount;
         }
       }
-    } catch (e) {
-      debugPrint("Error fetching user data: $e");
     }
+    // Update the controller for the last screen
+    setState(() {
+      _estimatedAmountController.text = total.toStringAsFixed(0);
+    });
   }
+  // ------------------------------
 
-  // --- NEW: Map Picker Integration ---
   Future<void> _openMapPicker() async {
-    // Navigate to MapPickerScreen
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
@@ -213,7 +181,6 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
       ),
     );
 
-    // Handle returned data
     if (result != null && result is Map) {
       setState(() {
         _mapLocationController.text = "${result['lat'].toStringAsFixed(6)}, ${result['lng'].toStringAsFixed(6)}";
@@ -222,12 +189,10 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
         if (result['district'] != null) _districtController.text = result['district'];
         if (result['state'] != null) _stateController.text = result['state'];
         
-        // Clear taluk to force user to re-select based on new district
         _talukController.clear();
       });
     }
   }
-  // -----------------------------------
 
   Future<void> _pickImage(ImageSource source) async {
     try {
@@ -259,15 +224,32 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
 
   bool _validateCurrentPage() {
     if (_currentPage == 0) {
+      // -- STEP 1: LOCATION VALIDATION --
       if (_placeController.text.trim().isEmpty) return _showWarning('Place name is required');
       if (_districtController.text.trim().isEmpty) return _showWarning('District is required');
       if (_talukController.text.trim().isEmpty) return _showWarning('Taluk is required');
+      
+      // STRICT Validation for District & Taluk
+      final String selectedDist = _districtController.text.trim();
+      final String selectedTaluk = _talukController.text.trim();
+
+      if (!_tnDistricts.contains(selectedDist)) {
+        return _showWarning('Please select a valid District from the list');
+      }
+
+      final List<String>? validTaluks = _districtTaluks[selectedDist];
+      if (validTaluks == null || !validTaluks.contains(selectedTaluk)) {
+        return _showWarning('Taluk "$selectedTaluk" does not belong to $selectedDist. Please select from the list.');
+      }
+
       if (_mapLocationController.text.trim().isEmpty) return _showWarning('Please pick a location on map');
       if (_selectedDate == null) return _showWarning('Please select a visit date');
+      
       return true;
     }
     
     if (_currentPage == 1) {
+      // -- STEP 2: FEATURE VALIDATION --
       bool hasNew = _features.any((f) => f.condition == 'new');
       if (!hasNew) {
         return _showWarning('Please select at least one structure to be NEW to proceed.');
@@ -290,6 +272,10 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
     }
 
     if (_currentPage == 2) {
+      // -- STEP 3: CONTACT & DETAILS VALIDATION --
+      if (_localPersonNameController.text.trim().isEmpty) return _showWarning('Local person name is required');
+      if (_localPersonPhoneController.text.trim().isEmpty) return _showWarning('Local person phone is required');
+      
       if (_selectedImages.length < 5) return _showWarning('At least 5 site images are required');
       if (_estimatedAmountController.text.isEmpty) return _showWarning('Estimated amount is required');
     }
@@ -323,16 +309,22 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
       await FirebaseFirestore.instance.collection('projects').doc(rawId).set({
         'projectId': projectDisplayId,
         'userId': user.uid,
-        'aadharNumber': _aadharNumber,
+        
+        // Location Info
         'place': _placeController.text.trim(),
         'taluk': _talukController.text.trim(),
         'district': _districtController.text.trim(),
         'state': _stateController.text.trim(),
         'mapLocation': _mapLocationController.text.trim(),
         'visitDate': _selectedDate != null ? Timestamp.fromDate(_selectedDate!) : null,
+        
+        // Features
         'features': featureMaps,
-        'contactName': _contactNameController.text.trim(),
-        'contactPhone': _contactPhoneController.text.trim(),
+        
+        // Local Contact Info
+        'localPersonName': _localPersonNameController.text.trim(),
+        'localPersonPhone': _localPersonPhoneController.text.trim(),
+        
         'estimatedAmount': _estimatedAmountController.text.trim(),
         'imageUrls': uploadedImageUrls,
         'dateCreated': FieldValue.serverTimestamp(),
@@ -376,12 +368,12 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
         children: [
           _title('Location Info', 'Enter details of the site'),
           const SizedBox(height: 16),
-          _plainTextField(_placeController, 'Place'),
+          _plainTextField(_placeController, 'Site / Place Name'),
+          
           _buildDistrictAutocomplete(),
           _buildTalukAutocomplete(),
           _plainTextField(_stateController, 'State', readOnly: true),
           
-          // --- UPDATED MAP ROW ---
           Row(
             children: [
               Expanded(child: _plainTextField(_mapLocationController, 'Map Location', readOnly: true)),
@@ -391,13 +383,12 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
                 decoration: BoxDecoration(color: const Color(0xFF5D4037), borderRadius: BorderRadius.circular(10)),
                 child: IconButton(
                   icon: const Icon(Icons.map_outlined, color: Colors.white), 
-                  onPressed: _openMapPicker, // Calls the map screen
+                  onPressed: _openMapPicker, 
                   tooltip: "Pick Location on Map",
                 ),
               ),
             ],
           ),
-          // -----------------------
           
           InkWell(onTap: () => _selectDate(context), child: _dateField()),
         ],
@@ -534,28 +525,129 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
   }
 
   Widget _buildFeatureCard(FeatureEntry entry) {
+    List<Map<String, dynamic>> currentDimensions;
+    if (entry.key == 'shed') {
+      currentDimensions = _shedDimensions;
+    } else {
+      currentDimensions = _predefinedDimensions;
+    }
+
+    String customSizeLabel = 'Size (e.g. 5 ft)';
+    if (entry.key == 'avudai') {
+      customSizeLabel = 'Width of Avudai';
+    }
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 12), padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFF5E6CA))),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFFF5E6CA))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [Text(entry.label, style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFF3E2723))), const SizedBox(width: 8), 
-          Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: entry.condition == 'old' ? Colors.grey.shade200 : Colors.green.shade100, borderRadius: BorderRadius.circular(6)),
-          child: Text(entry.condition == 'old' ? 'Old' : 'New', style: TextStyle(fontSize: 10, color: entry.condition == 'old' ? Colors.grey.shade800 : Colors.green.shade800, fontWeight: FontWeight.w600)))]),
+        Row(children: [
+          Text(entry.label,
+              style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF3E2723))),
+          const SizedBox(width: 8),
+          Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                  color: entry.condition == 'old'
+                      ? Colors.grey.shade200
+                      : Colors.green.shade100,
+                  borderRadius: BorderRadius.circular(6)),
+              child: Text(entry.condition == 'old' ? 'Old' : 'New',
+                  style: TextStyle(
+                      fontSize: 10,
+                      color: entry.condition == 'old'
+                          ? Colors.grey.shade800
+                          : Colors.green.shade800,
+                      fontWeight: FontWeight.w600)))
+        ]),
         const SizedBox(height: 8),
         Row(children: [
-          Expanded(child: _buildFeatureConditionButton(label: 'Old / Existing', isSelected: entry.condition == 'old', onTap: () { setState(() { entry.condition = 'old'; entry.dimension = null; entry.amount = null; }); })),
+          Expanded(
+              child: _buildFeatureConditionButton(
+                  label: 'Old / Existing',
+                  isSelected: entry.condition == 'old',
+                  onTap: () {
+                    setState(() {
+                      entry.condition = 'old';
+                      entry.dimension = null;
+                      entry.amount = null;
+                    });
+                    // Trigger Calculation
+                    _calculateTotalEstimate();
+                  })),
           const SizedBox(width: 8),
-          Expanded(child: _buildFeatureConditionButton(label: 'New Structure', isSelected: entry.condition == 'new', onTap: () { setState(() { entry.condition = 'new'; _selectedFeatureEntry = entry; }); })),
+          Expanded(
+              child: _buildFeatureConditionButton(
+                  label: 'New Structure',
+                  isSelected: entry.condition == 'new',
+                  onTap: () {
+                    setState(() {
+                      entry.condition = 'new';
+                      _selectedFeatureEntry = entry;
+                    });
+                    // Trigger Calculation
+                    _calculateTotalEstimate();
+                  })),
         ]),
+        
         if (entry.condition == 'new') ...[
           const SizedBox(height: 12),
-          ..._predefinedDimensions.map((dim) => _buildFeatureDimensionTile(entry: entry, value: dim['name'], title: dim['name'], subtitle: 'Estimate: ₹${dim['amount']}', onSelected: () { setState(() { entry.dimension = dim['name']; entry.amount = dim['amount'].toString(); }); })),
-          _buildFeatureDimensionTile(entry: entry, value: 'custom', title: 'Other', subtitle: 'Custom Size & Amount', onSelected: () { setState(() { entry.dimension = 'custom'; }); }),
+          
+          ...currentDimensions.map((dim) => _buildFeatureDimensionTile(
+              entry: entry,
+              value: dim['name'],
+              title: dim['name'],
+              subtitle: 'Estimate: ₹${dim['amount']}',
+              onSelected: () {
+                setState(() {
+                  entry.dimension = dim['name'];
+                  entry.amount = dim['amount'].toString();
+                });
+                // Trigger Calculation
+                _calculateTotalEstimate();
+              })),
+
+          _buildFeatureDimensionTile(
+              entry: entry,
+              value: 'custom',
+              title: 'Other',
+              subtitle: 'Custom Size & Amount',
+              onSelected: () {
+                setState(() {
+                  entry.dimension = 'custom';
+                });
+                // Note: We don't calculate here because amount is empty initially
+              }),
+              
           if (entry.dimension == 'custom') ...[
             const SizedBox(height: 8),
-            TextField(decoration: const InputDecoration(labelText: 'Size (e.g. 5 ft)', border: OutlineInputBorder()), onChanged: (v) => entry.customSize = v),
+            TextField(
+                decoration: InputDecoration(
+                  labelText: customSizeLabel, 
+                  border: const OutlineInputBorder()
+                ),
+                onChanged: (v) => entry.customSize = v
+            ),
             const SizedBox(height: 8),
-            TextField(decoration: const InputDecoration(labelText: 'Required Amount (Rs)', border: OutlineInputBorder()), keyboardType: TextInputType.number, onChanged: (v) => entry.amount = v),
+            TextField(
+                decoration: const InputDecoration(
+                  labelText: 'Required Amount (Rs)', 
+                  border: OutlineInputBorder()
+                ),
+                keyboardType: TextInputType.number,
+                onChanged: (v) {
+                   entry.amount = v;
+                   // Trigger Calculation as user types
+                   _calculateTotalEstimate();
+                }
+            ),
           ]
         ]
       ]),
@@ -575,12 +667,15 @@ class _CreateProjectScreenState extends State<CreateProjectScreen> {
 
   Widget _buildContactPage() {
     return _buildFormContainer(child: Column(children: [
-      _title('Contact Details', 'Contractor Information'),
+      _title('Contact Details', 'Local Person / Site Information'),
       const SizedBox(height: 16),
-      _plainTextField(_contactNameController, 'Contact Name', readOnly: true),
-      _plainTextField(_contactPhoneController, 'Phone Number', readOnly: true),
-      _plainTextField(TextEditingController(text: _aadharNumber), 'Aadhar Number', readOnly: true),
+      
+      _plainTextField(_localPersonNameController, 'Local Person Name'),
+      _plainTextField(_localPersonPhoneController, 'Local Person Phone', keyboard: TextInputType.phone),
+      
+      // Editable total cost field (Updates automatically, but can be overridden)
       _plainTextField(_estimatedAmountController, 'Total Estimated Cost', keyboard: TextInputType.number),
+      
       const SizedBox(height: 20),
       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
         Text('Site Photos', style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold)),

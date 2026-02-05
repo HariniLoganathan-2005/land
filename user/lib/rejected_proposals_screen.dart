@@ -26,10 +26,27 @@ class RejectedProposalsScreen extends StatelessWidget {
         stream: FirebaseFirestore.instance
             .collection('projects')
             .where('userId', isEqualTo: user?.uid)
-            .where('status', isEqualTo: 'archived_rejected') // Fetches moved/deleted rejected projects
-            .orderBy('dateCreated', descending: true)
+            .where('status', isEqualTo: 'archived_rejected') 
+            .orderBy('dateCreated', descending: true) // This is what needs the index
             .snapshots(),
         builder: (context, snapshot) {
+          // Handle specific Index Error visually
+          if (snapshot.hasError) {
+            if (snapshot.error.toString().contains('requires an index')) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Text(
+                    "Building Database Index...\nPlease wait 2-3 minutes and try again.",
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.poppins(color: Colors.brown),
+                  ),
+                ),
+              );
+            }
+            return Center(child: Text("Error: ${snapshot.error}"));
+          }
+
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator(color: Color(0xFF5D4037)));
           }
@@ -71,7 +88,6 @@ class RejectedProposalsScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: Colors.red.withOpacity(0.1)),
         boxShadow: [
           BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))
         ],
@@ -79,76 +95,24 @@ class RejectedProposalsScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Project ID on Top Left
-          Text(
-            data['projectId'] ?? 'No ID',
-            style: GoogleFonts.poppins(
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              color: Colors.red[900],
-            ),
-          ),
-          const SizedBox(height: 8),
           Text(
             data['place'] ?? 'Unnamed Temple',
-            style: GoogleFonts.cinzel(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: const Color(0xFF3E2723),
-            ),
+            style: GoogleFonts.cinzel(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
-          Row(
-            children: [
-              const Icon(Icons.location_on, size: 14, color: Color(0xFF8D6E63)),
-              const SizedBox(width: 4),
-              Text(
-                "${data['taluk']}, ${data['district']}",
-                style: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFF8D6E63)),
-              ),
-            ],
+          Text(
+            "${data['taluk']}, ${data['district']}",
+            style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[600]),
           ),
           const Divider(height: 24),
-          
-          // Details of submission
-          Text("SUBMISSION DETAILS:", 
-            style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey[600])),
-          const SizedBox(height: 8),
-          
-          _detailRow("Estimated Cost", "₹${data['estimatedAmount']}"),
-          _detailRow("Visit Date", data['visitDate'] != null 
-              ? DateFormat('dd-MM-yyyy').format((data['visitDate'] as Timestamp).toDate()) 
-              : "N/A"),
-          
-          const SizedBox(height: 8),
-          Text("Features Selected:", 
-            style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 4),
-          Wrap(
-            spacing: 6,
-            children: (data['features'] as List? ?? []).map((f) {
-              final feature = f as Map<String, dynamic>;
-              return Chip(
-                label: Text("${feature['label']}: ${feature['condition'].toString().toUpperCase()}"),
-                backgroundColor: const Color(0xFFFFF9C4),
-                labelStyle: const TextStyle(fontSize: 9, color: Colors.black87),
-                visualDensity: VisualDensity.compact,
-              );
-            }).toList(),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text("Estimated Cost:", style: GoogleFonts.poppins(fontSize: 12)),
+              Text("₹${data['estimatedAmount']}", 
+                style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold)),
+            ],
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _detailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[700])),
-          Text(value, style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF3E2723))),
         ],
       ),
     );

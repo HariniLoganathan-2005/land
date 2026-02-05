@@ -35,7 +35,8 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
   // --- READ 'estimatedAmount' OR 'budget' ---
   double get _totalBudget {
     if (widget.project['estimatedAmount'] != null) {
-      return double.tryParse(widget.project['estimatedAmount'].toString()) ?? 0.0;
+      return double.tryParse(widget.project['estimatedAmount'].toString()) ??
+          0.0;
     } else if (widget.project['budget'] != null) {
       return double.tryParse(widget.project['budget'].toString()) ?? 0.0;
     }
@@ -171,7 +172,7 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
     final amountCtrl = TextEditingController();
     final upiCtrl = TextEditingController();
     XFile? qrFile;
-    
+
     String? amountErrorText;
 
     await showDialog(
@@ -196,34 +197,31 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
                   ),
                 ),
                 const SizedBox(height: 10),
-
                 TextField(
                     controller: titleCtrl,
-                    decoration:
-                        const InputDecoration(labelText: 'Work Name')),
-                
+                    decoration: const InputDecoration(labelText: 'Work Name')),
                 TextField(
-                    controller: amountCtrl,
-                    keyboardType: TextInputType.number,
-                    onChanged: (value) {
-                      double enteredAmount = double.tryParse(value) ?? 0.0;
-                      if (enteredAmount > _totalBudget) {
-                        setDialogState(() {
-                          amountErrorText = "Exceeds total budget (₹$_totalBudget)";
-                        });
-                      } else {
-                        setDialogState(() {
-                          amountErrorText = null;
-                        });
-                      }
-                    },
-                    decoration: InputDecoration(
-                        labelText: 'Amount',
-                        errorText: amountErrorText,
-                        errorStyle: const TextStyle(color: Colors.red),
-                    ),
+                  controller: amountCtrl,
+                  keyboardType: TextInputType.number,
+                  onChanged: (value) {
+                    double enteredAmount = double.tryParse(value) ?? 0.0;
+                    if (enteredAmount > _totalBudget) {
+                      setDialogState(() {
+                        amountErrorText =
+                            "Exceeds total budget (₹$_totalBudget)";
+                      });
+                    } else {
+                      setDialogState(() {
+                        amountErrorText = null;
+                      });
+                    }
+                  },
+                  decoration: InputDecoration(
+                    labelText: 'Amount',
+                    errorText: amountErrorText,
+                    errorStyle: const TextStyle(color: Colors.red),
+                  ),
                 ),
-                
                 TextField(
                     controller: upiCtrl,
                     decoration:
@@ -248,14 +246,15 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
             TextButton(
                 onPressed: () => Navigator.pop(context),
                 child: const Text('Cancel')),
-            
             ElevatedButton(
-              onPressed: (amountErrorText != null) 
-                  ? null 
+              onPressed: (amountErrorText != null)
+                  ? null
                   : () async {
-                      if (titleCtrl.text.isEmpty || amountCtrl.text.isEmpty) return;
-                      
-                      double reqAmount = double.tryParse(amountCtrl.text) ?? 0.0;
+                      if (titleCtrl.text.isEmpty || amountCtrl.text.isEmpty)
+                        return;
+
+                      double reqAmount =
+                          double.tryParse(amountCtrl.text) ?? 0.0;
                       if (reqAmount > _totalBudget) return;
 
                       String? qrUrl;
@@ -306,8 +305,8 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
               children: [
                 TextField(
                     controller: titleCtrl,
-                    decoration: const InputDecoration(
-                        labelText: 'Bill For (Title)')),
+                    decoration:
+                        const InputDecoration(labelText: 'Bill For (Title)')),
                 TextField(
                     controller: amountCtrl,
                     decoration:
@@ -320,29 +319,25 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
                       : () async {
                           final imgs = await _picker.pickMultiImage();
                           if (imgs.isNotEmpty) {
-                            setDialogState(
-                                () => selectedFiles = imgs);
+                            setDialogState(() => selectedFiles = imgs);
                           }
                         },
                   icon: const Icon(Icons.image),
-                  label: Text(
-                      selectedFiles.isEmpty
-                          ? 'Select Bill Photos'
-                          : '${selectedFiles.length} Images Selected'),
+                  label: Text(selectedFiles.isEmpty
+                      ? 'Select Bill Photos'
+                      : '${selectedFiles.length} Images Selected'),
                 ),
                 if (isUploading)
                   const Padding(
                     padding: EdgeInsets.only(top: 20),
-                    child: CircularProgressIndicator(
-                        color: primaryMaroon),
+                    child: CircularProgressIndicator(color: primaryMaroon),
                   ),
               ],
             ),
           ),
           actions: [
             TextButton(
-              onPressed:
-                  isUploading ? null : () => Navigator.pop(context),
+              onPressed: isUploading ? null : () => Navigator.pop(context),
               child: const Text('Cancel'),
             ),
             ElevatedButton(
@@ -352,10 +347,9 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
                       if (titleCtrl.text.isEmpty ||
                           amountCtrl.text.isEmpty ||
                           selectedFiles.isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text(
-                                    'Please fill all fields and select images')));
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                            content: Text(
+                                'Please fill all fields and select images')));
                         return;
                       }
 
@@ -363,11 +357,10 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
                       try {
                         List<String> urls = [];
                         for (var file in selectedFiles) {
-                          String? url =
-                              await CloudinaryService.uploadImage(
-                                  imageFile: file,
-                                  userId: _userId,
-                                  projectId: _projectId);
+                          String? url = await CloudinaryService.uploadImage(
+                              imageFile: file,
+                              userId: _userId,
+                              projectId: _projectId);
                           if (url != null) urls.add(url);
                         }
 
@@ -375,28 +368,23 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
                           'projectId': _projectId,
                           'userId': _userId,
                           'title': titleCtrl.text,
-                          'amount':
-                              double.parse(amountCtrl.text),
+                          'amount': double.parse(amountCtrl.text),
                           'imageUrls': urls,
-                          'createdAt':
-                              FieldValue.serverTimestamp(),
+                          'createdAt': FieldValue.serverTimestamp(),
                         });
 
                         if (mounted) {
                           Navigator.pop(context);
                           ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                  content: Text(
-                                      'Bill Uploaded Successfully!')));
+                                  content:
+                                      Text('Bill Uploaded Successfully!')));
                         }
                       } catch (e) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                                content:
-                                    Text('Upload failed: $e')));
+                            SnackBar(content: Text('Upload failed: $e')));
                       } finally {
-                        setDialogState(
-                            () => isUploading = false);
+                        setDialogState(() => isUploading = false);
                       }
                     },
               child: const Text('Upload'),
@@ -417,8 +405,7 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
           icon: const Icon(Icons.upload),
           label: const Text("Upload Bill"),
           style: ElevatedButton.styleFrom(
-              backgroundColor: primaryMaroon,
-              foregroundColor: Colors.white),
+              backgroundColor: primaryMaroon, foregroundColor: Colors.white),
         ),
         Expanded(
           child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
@@ -428,15 +415,13 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
                 .snapshots(),
             builder: (context, snapshot) {
               if (!snapshot.hasData) {
-                return const Center(
-                    child: CircularProgressIndicator());
+                return const Center(child: CircularProgressIndicator());
               }
               final docs = snapshot.data!.docs;
               if (docs.isEmpty) {
                 return Center(
                     child: Text("No bills uploaded yet",
-                        style: GoogleFonts.poppins(
-                            color: Colors.grey)));
+                        style: GoogleFonts.poppins(color: Colors.grey)));
               }
 
               return ListView.builder(
@@ -448,10 +433,8 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
                   return Card(
                     child: ExpansionTile(
                       title: Text(bill['title'] ?? 'Bill',
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold)),
-                      subtitle:
-                          Text('Amount: ₹${bill['amount'] ?? '0'}'),
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text('Amount: ₹${bill['amount'] ?? '0'}'),
                       children: [
                         if (imageUrls.isNotEmpty)
                           Padding(
@@ -466,8 +449,7 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
                                         child: ClipRRect(
                                           borderRadius:
                                               BorderRadius.circular(8),
-                                          child: Image.network(
-                                              url.toString(),
+                                          child: Image.network(url.toString(),
                                               width: 80,
                                               height: 80,
                                               fit: BoxFit.cover),
@@ -497,8 +479,7 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
         children: [
           // Add work button
           Padding(
-            padding:
-                const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: SizedBox(
               width: double.infinity,
               height: 44,
@@ -552,15 +533,13 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
           .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          return const Center(
-              child: CircularProgressIndicator());
+          return const Center(child: CircularProgressIndicator());
         }
         final docs = snapshot.data!.docs;
         if (docs.isEmpty) {
           return Center(
               child: Text("No To Do works",
-                  style: GoogleFonts.poppins(
-                      color: Colors.grey)));
+                  style: GoogleFonts.poppins(color: Colors.grey)));
         }
 
         return ListView.builder(
@@ -568,18 +547,15 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
           itemCount: docs.length,
           itemBuilder: (context, index) {
             final doc = docs[index];
-            final data =
-                doc.data() as Map<String, dynamic>;
+            final data = doc.data() as Map<String, dynamic>;
             return Card(
               margin: const EdgeInsets.only(bottom: 12),
               child: ListTile(
                 title: Text(
                   data['taskName'] ?? 'Unknown Work',
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold),
+                  style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
-                subtitle: Text(
-                    data['description'] ?? 'Not started yet'),
+                subtitle: Text(data['description'] ?? 'Not started yet'),
                 trailing: ElevatedButton(
                   onPressed: () async {
                     await _firestore
@@ -587,8 +563,7 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
                         .doc(doc.id)
                         .update({
                       'status': 'ongoing',
-                      'startedAt':
-                          FieldValue.serverTimestamp(),
+                      'startedAt': FieldValue.serverTimestamp(),
                     });
                   },
                   style: ElevatedButton.styleFrom(
@@ -610,28 +585,25 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
       stream: _firestore
           .collection('project_tasks')
           .where('projectId', isEqualTo: _projectId)
-          .where('status', whereIn: ['ongoing', 'pending_approval'])
-          .snapshots(),
+          .where('status',
+              whereIn: ['ongoing', 'pending_approval']).snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          return const Center(
-              child: CircularProgressIndicator());
+          return const Center(child: CircularProgressIndicator());
         }
         final docs = snapshot.data!.docs;
 
         if (docs.isEmpty) {
           return Center(
               child: Text("No ongoing works",
-                  style: GoogleFonts.poppins(
-                      color: Colors.grey)));
+                  style: GoogleFonts.poppins(color: Colors.grey)));
         }
 
         return ListView.builder(
           padding: const EdgeInsets.all(16),
           itemCount: docs.length,
           itemBuilder: (context, index) {
-            final data =
-                docs[index].data() as Map<String, dynamic>;
+            final data = docs[index].data() as Map<String, dynamic>;
             final docId = docs[index].id;
             final status = data['status'] ?? 'ongoing';
 
@@ -664,24 +636,21 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
           .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          return const Center(
-              child: CircularProgressIndicator());
+          return const Center(child: CircularProgressIndicator());
         }
         final docs = snapshot.data!.docs;
 
         if (docs.isEmpty) {
           return Center(
               child: Text("No completed works",
-                  style: GoogleFonts.poppins(
-                      color: Colors.grey)));
+                  style: GoogleFonts.poppins(color: Colors.grey)));
         }
 
         return ListView.builder(
           padding: const EdgeInsets.all(16),
           itemCount: docs.length,
           itemBuilder: (context, index) {
-            final data =
-                docs[index].data() as Map<String, dynamic>;
+            final data = docs[index].data() as Map<String, dynamic>;
 
             final Timestamp? startTs = data['startedAt'];
             final Timestamp? endTs = data['completedAt'];
@@ -689,8 +658,7 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
             final String startStr = _formatTimestamp(startTs);
             final String endStr = _formatTimestamp(endTs);
 
-            final List<dynamic> endImages =
-                data['endImages'] ?? [];
+            final List<dynamic> endImages = data['endImages'] ?? [];
 
             return Card(
               margin: const EdgeInsets.only(bottom: 12),
@@ -698,37 +666,31 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
               child: Padding(
                 padding: const EdgeInsets.all(12.0),
                 child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.check_circle,
-                            color: Colors.green),
+                        const Icon(Icons.check_circle, color: Colors.green),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
                             data['taskName'] ?? '',
                             style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16),
+                                fontWeight: FontWeight.bold, fontSize: 16),
                           ),
                         ),
-                        const Icon(Icons.verified,
-                            color: Colors.blue),
+                        const Icon(Icons.verified, color: Colors.blue),
                       ],
                     ),
                     const SizedBox(height: 8),
                     Text("Start: $startStr | End: $endStr",
-                        style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey)),
+                        style:
+                            const TextStyle(fontSize: 12, color: Colors.grey)),
                     if (endImages.isNotEmpty) ...[
                       const SizedBox(height: 10),
                       const Text("Submitted Photos:",
                           style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12)),
+                              fontWeight: FontWeight.bold, fontSize: 12)),
                       const SizedBox(height: 5),
                       SizedBox(
                         height: 70,
@@ -737,23 +699,14 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
                           itemCount: endImages.length,
                           itemBuilder: (context, imgIndex) {
                             return Padding(
-                              padding:
-                                  const EdgeInsets.only(
-                                      right: 8.0),
+                              padding: const EdgeInsets.only(right: 8.0),
                               child: GestureDetector(
                                 onTap: () =>
-                                    _showFullScreenImage(
-                                        endImages[
-                                            imgIndex]),
+                                    _showFullScreenImage(endImages[imgIndex]),
                                 child: ClipRRect(
-                                  borderRadius:
-                                      BorderRadius.circular(
-                                          6),
-                                  child: Image.network(
-                                      endImages[imgIndex],
-                                      width: 70,
-                                      height: 70,
-                                      fit: BoxFit.cover),
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: Image.network(endImages[imgIndex],
+                                      width: 70, height: 70, fit: BoxFit.cover),
                                 ),
                               ),
                             );
@@ -803,67 +756,55 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
     return snap.docs.length;
   }
 
+  // Inside your _ProjectOverviewScreenState
+
   Future<void> _requestProjectCompletion() async {
     setState(() => _isCompletionRequesting = true);
     try {
+      // Validation Logic
       final completed = await _getCompletedTasksCount();
       final ongoing = await _getOngoingTasksCount();
       final todo = await _getTodoTasksCount();
 
       if (completed == 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text(
-                'Complete at least one work before requesting project completion.'),
-          ),
-        );
+                'Complete at least one task before requesting completion.')));
         return;
       }
 
       if (ongoing > 0 || todo > 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-                'All works must be completed or deleted. No To Do or Ongoing tasks allowed when requesting completion.'),
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('All tasks must be finished or deleted first.')));
         return;
       }
 
-      await _firestore
-          .collection('project_completion_requests')
-          .add({
+      // 1. Send formal request to Admin
+      await _firestore.collection('project_completion_requests').add({
         'projectId': _projectId,
         'userId': _userId,
         'status': 'pending',
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      await _firestore.collection('project_chats').add({
+      // 2. IMPORTANT: Post to 'project_messages' so it shows in the Chat tab
+      await _firestore.collection('project_messages').add({
         'projectId': _projectId,
-        'senderId': _userId,
         'senderRole': 'user',
-        'message':
-            'User has requested to mark this project as completed.',
+        'message': 'User has requested to mark this project as completed.',
         'type': 'system_completion_request',
         'createdAt': FieldValue.serverTimestamp(),
-        'isReadByAdmin': false,
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text(
-                'Completion request sent to admin, and message posted in chat.')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Completion request sent! check the Feedback tab.')));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error sending request: $e')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
       if (mounted) setState(() => _isCompletionRequesting = false);
     }
   }
-
   // ===================== TABS WRAPPERS =====================
 
   Widget _transactionsTab() {
@@ -877,7 +818,7 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
             totalBudget: _totalBudget, // <--- Budget Passed Correctly Here
           ),
         ),
-        
+
         // 2. THE BUTTONS (Request Money & Complete Project)
         Container(
           padding: const EdgeInsets.all(12),
@@ -911,7 +852,9 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: _isCompletionRequesting ? null : _requestProjectCompletion,
+                  onPressed: _isCompletionRequesting
+                      ? null
+                      : _requestProjectCompletion,
                   icon: const Icon(Icons.flag),
                   label: Text(
                     _isCompletionRequesting
@@ -964,14 +907,13 @@ class _ProjectOverviewScreenState extends State<ProjectOverviewScreen>
           slivers: [
             SliverToBoxAdapter(
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
                 color: primaryMaroon,
                 child: Row(
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.arrow_back,
-                          color: Colors.white),
+                      icon: const Icon(Icons.arrow_back, color: Colors.white),
                       onPressed: () => Navigator.pop(context),
                     ),
                     const SizedBox(width: 8),
@@ -1081,16 +1023,13 @@ class _OngoingTaskCardState extends State<OngoingTaskCard> {
           context: context,
           builder: (context) => AlertDialog(
             title: const Text("Delete Work"),
-            content: const Text(
-                "Are you sure you want to delete this work?"),
+            content: const Text("Are you sure you want to delete this work?"),
             actions: [
               TextButton(
-                  onPressed: () =>
-                      Navigator.pop(context, false),
+                  onPressed: () => Navigator.pop(context, false),
                   child: const Text("Cancel")),
               TextButton(
-                  onPressed: () =>
-                      Navigator.pop(context, true),
+                  onPressed: () => Navigator.pop(context, true),
                   child: const Text("Delete",
                       style: TextStyle(color: Colors.red))),
             ],
@@ -1109,8 +1048,7 @@ class _OngoingTaskCardState extends State<OngoingTaskCard> {
     if (_selectedImages.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-              "Please upload an image before sending for approval"),
+          content: Text("Please upload an image before sending for approval"),
           backgroundColor: Colors.red,
         ),
       );
@@ -1136,11 +1074,11 @@ class _OngoingTaskCardState extends State<OngoingTaskCard> {
         'endImages': uploadedUrls,
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Sent for approval!")));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text("Sent for approval!")));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error: $e")));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("Error: $e")));
     } finally {
       if (mounted) setState(() => _isUploading = false);
     }
@@ -1148,24 +1086,20 @@ class _OngoingTaskCardState extends State<OngoingTaskCard> {
 
   @override
   Widget build(BuildContext context) {
-    final bool isPending =
-        widget.currentStatus == 'pending_approval';
+    final bool isPending = widget.currentStatus == 'pending_approval';
 
     return Card(
       elevation: 2,
       margin: const EdgeInsets.only(bottom: 16),
-      shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       color: Colors.white,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              mainAxisAlignment:
-                  MainAxisAlignment.spaceBetween,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(
                     child: Text(widget.taskName,
@@ -1180,21 +1114,20 @@ class _OngoingTaskCardState extends State<OngoingTaskCard> {
               ],
             ),
             Text(widget.dateDisplay,
-                style: GoogleFonts.poppins(
-                    fontSize: 14, color: Colors.grey[600])),
+                style:
+                    GoogleFonts.poppins(fontSize: 14, color: Colors.grey[600])),
             const SizedBox(height: 16),
             if (!isPending) ...[
               Text("Upload Completion Photo (Max 5):",
-                  style: GoogleFonts.poppins(
-                      fontSize: 14, color: Colors.black87)),
+                  style:
+                      GoogleFonts.poppins(fontSize: 14, color: Colors.black87)),
               const SizedBox(height: 8),
               Row(
                 children: [
                   ElevatedButton(
                     onPressed: _pickImages,
                     style: ElevatedButton.styleFrom(
-                        backgroundColor:
-                            const Color(0xFFE0E0E0),
+                        backgroundColor: const Color(0xFFE0E0E0),
                         foregroundColor: Colors.black,
                         elevation: 0),
                     child: const Text("Choose File"),
@@ -1214,29 +1147,22 @@ class _OngoingTaskCardState extends State<OngoingTaskCard> {
               ),
               if (_selectedImages.isNotEmpty)
                 Padding(
-                  padding:
-                      const EdgeInsets.only(top: 10, bottom: 16),
+                  padding: const EdgeInsets.only(top: 10, bottom: 16),
                   child: Wrap(
                     spacing: 8,
                     runSpacing: 8,
-                    children:
-                        _selectedImages.asMap().entries.map((entry) {
+                    children: _selectedImages.asMap().entries.map((entry) {
                       final int idx = entry.key;
                       final XFile img = entry.value;
                       return Stack(
                         children: [
                           ClipRRect(
-                            borderRadius:
-                                BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(4),
                             child: kIsWeb
                                 ? Image.network(img.path,
-                                    width: 60,
-                                    height: 60,
-                                    fit: BoxFit.cover)
+                                    width: 60, height: 60, fit: BoxFit.cover)
                                 : Image.file(File(img.path),
-                                    width: 60,
-                                    height: 60,
-                                    fit: BoxFit.cover),
+                                    width: 60, height: 60, fit: BoxFit.cover),
                           ),
                           Positioned(
                             right: 0,
@@ -1246,8 +1172,7 @@ class _OngoingTaskCardState extends State<OngoingTaskCard> {
                               child: Container(
                                 color: Colors.black54,
                                 child: const Icon(Icons.close,
-                                    color: Colors.white,
-                                    size: 16),
+                                    color: Colors.white, size: 16),
                               ),
                             ),
                           )
@@ -1262,17 +1187,14 @@ class _OngoingTaskCardState extends State<OngoingTaskCard> {
                 width: double.infinity,
                 height: 45,
                 child: ElevatedButton(
-                  onPressed:
-                      _isUploading ? null : _sendForApproval,
+                  onPressed: _isUploading ? null : _sendForApproval,
                   style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green,
                       shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(6)),
+                          borderRadius: BorderRadius.circular(6)),
                       elevation: 0),
                   child: _isUploading
-                      ? const CircularProgressIndicator(
-                          color: Colors.white)
+                      ? const CircularProgressIndicator(color: Colors.white)
                       : const Text("Send for Approval",
                           style: TextStyle(
                               color: Colors.white,
@@ -1284,19 +1206,15 @@ class _OngoingTaskCardState extends State<OngoingTaskCard> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                    color:
-                        Colors.orange.withOpacity(0.1),
-                    borderRadius:
-                        BorderRadius.circular(6)),
+                    color: Colors.orange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(6)),
                 child: const Row(
                   children: [
-                    Icon(Icons.hourglass_bottom,
-                        color: Colors.orange),
+                    Icon(Icons.hourglass_bottom, color: Colors.orange),
                     SizedBox(width: 10),
                     Text("Pending Admin Approval",
                         style: TextStyle(
-                            color: Colors.orange,
-                            fontWeight: FontWeight.bold)),
+                            color: Colors.orange, fontWeight: FontWeight.bold)),
                   ],
                 ),
               )

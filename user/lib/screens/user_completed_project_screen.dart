@@ -1,344 +1,311 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 
 class UserCompletedProjectScreen extends StatefulWidget {
-  final Map<String, dynamic> project; // from WelcomeScreen
+  final Map<String, dynamic> project;
 
-  const UserCompletedProjectScreen({
-    Key? key,
-    required this.project,
-  }) : super(key: key);
+  const UserCompletedProjectScreen({super.key, required this.project});
 
   @override
-  State<UserCompletedProjectScreen> createState() =>
-      _UserCompletedProjectScreenState();
+  State<UserCompletedProjectScreen> createState() => _UserCompletedProjectScreenState();
 }
 
-class _UserCompletedProjectScreenState
-    extends State<UserCompletedProjectScreen> {
-  static const Color primaryMaroon = Color(0xFF6D1B1B);
-  static const Color primaryGold = Color(0xFFD4AF37);
-  static const Color backgroundCream = Color(0xFFFFF7E8);
+class _UserCompletedProjectScreenState extends State<UserCompletedProjectScreen> {
+  // Theme Colors matching your project style
+  static const Color primaryMaroon = Color(0xFF6A1F1A);
   static const Color darkMaroonText = Color(0xFF4A1010);
+  static const Color backgroundCream = Color(0xFFFFF7E8);
+  static const Color goldAccent = Color(0xFFD4AF37);
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  late Map<String, dynamic> project;
-  late String projectId;
-
   List<Map<String, dynamic>> works = [];
-  bool loadingWorks = true;
+  List<Map<String, dynamic>> transactions = [];
+  List<Map<String, dynamic>> bills = [];
 
-  String s(dynamic v) => v?.toString() ?? '';
-  num n(dynamic v) {
-    if (v is num) return v;
-    if (v is String) return num.tryParse(v) ?? 0;
-    return 0;
-  }
-
-  DateTime? toDate(dynamic v) {
-    if (v == null) return null;
-    if (v is DateTime) return v;
-    if (v is Timestamp) return v.toDate();
-    return DateTime.tryParse(v.toString());
-  }
-
-  String fmtDate(dynamic v) {
-    final d = toDate(v);
-    if (d == null) return '';
-    return '${d.day.toString().padLeft(2, '0')}-'
-        '${d.month.toString().padLeft(2, '0')}-'
-        '${d.year}';
-  }
+  bool isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    project = Map<String, dynamic>.from(widget.project);
-    projectId = (project['projectId'] ?? project['id'] ?? '').toString();
-    debugPrint('USER COMPLETED: projectId from project map = $projectId');
-    _loadWorks();
+    _loadAllProjectDetails();
   }
 
-  Future<void> _loadWorks() async {
-    if (projectId.isEmpty) {
-      debugPrint('USER COMPLETED: projectId is EMPTY, no query run.');
-      setState(() {
-        loadingWorks = false;
-        works = [];
-      });
+  String get _projectId => widget.project['id'] ?? widget.project['projectId'] ?? '';
+
+  Future<void> _loadAllProjectDetails() async {
+    if (_projectId.isEmpty) {
+      setState(() => isLoading = false);
       return;
     }
 
-    setState(() => loadingWorks = true);
+    setState(() => isLoading = true);
     try {
-      debugPrint(
-          'USER COMPLETED: querying project_tasks for projectId = $projectId');
-
-      final snap = await _firestore
+      // 1. Fetch Completed Activities
+      final tasksSnap = await _firestore
           .collection('project_tasks')
-          .where('projectId', isEqualTo: projectId)
+          .where('projectId', isEqualTo: _projectId)
           .where('status', isEqualTo: 'completed')
-          .orderBy('completedAt', descending: true)
           .get();
 
-      debugPrint('USER COMPLETED: found ${snap.docs.length} completed tasks');
+      // 2. Fetch Money Transactions
+      final transSnap = await _firestore
+          .collection('transactions')
+          .where('projectId', isEqualTo: _projectId)
+          .get();
 
-      works = snap.docs.map<Map<String, dynamic>>((d) {
-        final data = d.data();
-        return {
-          'id': d.id,
-          'name': data['taskName'] ?? '',
-          'description': data['description'] ?? '',
-          'date': data['completedAt'] ??
-              data['startedAt'] ??
-              data['createdAt'],
-          'amountDonated': n(data['amountDonated']),
-          'status': data['status'] ?? 'completed',
-          'imageUrls': (data['endImages'] as List? ?? [])
-              .map((e) => e.toString())
-              .toList(),
-        };
-      }).toList();
+      // 3. Fetch Uploaded Bills
+      final billsSnap = await _firestore
+          .collection('bills')
+          .where('projectId', isEqualTo: _projectId)
+          .get();
+
+      if (mounted) {
+        setState(() {
+          works = tasksSnap.docs.map((d) => d.data()).toList();
+          transactions = transSnap.docs.map((d) => d.data()).toList();
+          bills = billsSnap.docs.map((d) => d.data()).toList();
+          isLoading = false;
+        });
+      }
     } catch (e) {
-      debugPrint('Error loading completed tasks for user: $e');
-      works = [];
-    } finally {
-      if (mounted) setState(() => loadingWorks = false);
+      debugPrint("Error fetching details: $e");
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final place = s(project['place']);
-    final taluk = s(project['taluk']);
-    final district = s(project['district']);
-    final completedDate = fmtDate(project['completedDate']);
-
     return Scaffold(
       backgroundColor: backgroundCream,
       appBar: AppBar(
-        backgroundColor: primaryMaroon,
+        title: Text('Project Detailed Report', 
+            style: GoogleFonts.cinzel(fontWeight: FontWeight.bold, fontSize: 18)),
+        backgroundColor: const Color(0xFFF5E6CA),
+        foregroundColor: primaryMaroon,
         elevation: 0,
-        title: const Text(
-          'Completed Project',
-          style: TextStyle(color: Colors.white),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [primaryMaroon, primaryGold],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator(color: primaryMaroon))
+          : ListView(
+              padding: const EdgeInsets.all(16),
               children: [
-                Text(
-                  place.isEmpty ? 'Temple Project' : place,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '$taluk, $district',
-                  style: const TextStyle(color: primaryGold, fontSize: 13),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.green.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.flag_rounded,
-                              size: 14, color: Colors.green.shade800),
-                          const SizedBox(width: 5),
-                          const Text(
-                            'COMPLETED',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.green,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    if (completedDate.isNotEmpty)
-                      Text(
-                        'Completed on $completedDate',
-                        style: const TextStyle(
-                            color: Colors.white, fontSize: 12),
-                      ),
-                  ],
-                ),
+                _buildStatusHeader(),
+                const SizedBox(height: 12),
+                _buildInfoCard(),
+                const SizedBox(height: 12),
+                _buildFinanceSummaryCard(),
+                const SizedBox(height: 12),
+                _buildWorksSection(),
+                const SizedBox(height: 12),
+                _buildTransactionsSection(),
+                const SizedBox(height: 12),
+                _buildBillsSection(),
+                const SizedBox(height: 30),
               ],
             ),
-          ),
-          const SizedBox(height: 16),
-          _buildSummaryCard(),
-          const SizedBox(height: 16),
-          _buildWorksCard(),
+    );
+  }
+
+  Widget _buildStatusHeader() {
+    final status = widget.project['status'] ?? 'completed';
+    final isRejected = status == 'archived_rejected';
+    return Card(
+      color: isRejected ? Colors.red[50] : Colors.green[50],
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        leading: Icon(isRejected ? Icons.archive : Icons.verified_user, 
+            color: isRejected ? Colors.red[800] : Colors.green[800]),
+        title: Text(isRejected ? "PROPOSAL ARCHIVED" : "PROJECT COMPLETED",
+            style: TextStyle(fontWeight: FontWeight.bold, color: isRejected ? Colors.red[900] : Colors.green[900])),
+        subtitle: Text("Project ID: $_projectId"),
+      ),
+    );
+  }
+
+  Widget _buildInfoCard() {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      color: const Color(0xFFFFF2D5),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('General Information', 
+                style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: darkMaroonText)),
+            const Divider(),
+            _infoRow('Temple Name', widget.project['place']),
+            _infoRow('Location', "${widget.project['taluk']}, ${widget.project['district']}"),
+            _infoRow('Feature', widget.project['feature']),
+            _infoRow('Estimated', "₹${widget.project['estimatedAmount']}"),
+            _infoRow('Proposed Date', _formatDate(widget.project['dateCreated'])),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFinanceSummaryCard() {
+    double totalSpent = bills.fold(0.0, (sum, item) => sum + (double.tryParse(item['amount'].toString()) ?? 0));
+    double totalReceived = transactions.fold(0.0, (sum, item) => sum + (double.tryParse(item['amount'].toString()) ?? 0));
+
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      color: darkMaroonText,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Text('Financial Summary', style: GoogleFonts.cinzel(color: goldAccent, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _summaryColumn("Received", "₹${totalReceived.toStringAsFixed(0)}", Colors.green[300]!),
+                _summaryColumn("Spent (Bills)", "₹${totalSpent.toStringAsFixed(0)}", Colors.red[300]!),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWorksSection() {
+    return _sectionWrapper(
+      title: "Works Done",
+      icon: Icons.construction,
+      content: works.isEmpty 
+          ? const Text("No activities recorded.") 
+          : Column(
+              children: works.map((w) => ListTile(
+                leading: const Icon(Icons.check_circle, color: Colors.green, size: 20),
+                title: Text(w['taskName'] ?? 'Unnamed Task', style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text(w['description'] ?? ''),
+                trailing: (w['endImages'] != null && (w['endImages'] as List).isNotEmpty)
+                    ? IconButton(icon: const Icon(Icons.image), onPressed: () => _showImageGallery(w['endImages']))
+                    : null,
+              )).toList(),
+            ),
+    );
+  }
+
+  Widget _buildTransactionsSection() {
+    return _sectionWrapper(
+      title: "Money Transfers",
+      icon: Icons.account_balance,
+      content: transactions.isEmpty 
+          ? const Text("No transaction history.") 
+          : Column(
+              children: transactions.map((t) => ListTile(
+                leading: const Icon(Icons.arrow_downward, color: Colors.blue),
+                title: Text("₹${t['amount']}"),
+                subtitle: Text(t['title'] ?? t['description'] ?? 'Funds Transfer'),
+                trailing: Text(_formatDate(t['date']), style: const TextStyle(fontSize: 10)),
+              )).toList(),
+            ),
+    );
+  }
+
+  Widget _buildBillsSection() {
+    return _sectionWrapper(
+      title: "Verified Bills",
+      icon: Icons.receipt_long,
+      content: bills.isEmpty 
+          ? const Text("No bills found.") 
+          : Column(
+              children: bills.map((b) => ListTile(
+                leading: const Icon(Icons.receipt, color: Colors.orange),
+                title: Text(b['title'] ?? 'Bill'),
+                subtitle: Text("Amount: ₹${b['amount']}"),
+                trailing: const Icon(Icons.remove_red_eye, size: 18),
+                onTap: () => _showImageGallery(b['imageUrls']),
+              )).toList(),
+            ),
+    );
+  }
+
+  // --- Helper Widgets ---
+
+  Widget _sectionWrapper({required String title, required IconData icon, required Widget content}) {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Icon(icon, color: primaryMaroon, size: 18),
+              const SizedBox(width: 8),
+              Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            ]),
+            const Divider(),
+            content,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _infoRow(String label, dynamic value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          SizedBox(width: 100, child: Text(label, style: const TextStyle(color: Colors.brown, fontWeight: FontWeight.w500))),
+          Expanded(child: Text(value?.toString() ?? 'N/A', style: const TextStyle(fontWeight: FontWeight.bold))),
         ],
       ),
     );
   }
 
-  Widget _buildSummaryCard() {
-    final num totalDonated = n(project['donatedAmount']);
-    final num totalBillsAmount = n(project['totalBillsAmount']);
-    final num totalTransactionsAmount = n(project['totalTransactionsAmount']);
-    final num netRemaining = totalDonated - totalBillsAmount;
-
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      color: const Color(0xFFFFF2D5),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Financial Summary',
-              style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: darkMaroonText),
-            ),
-            const SizedBox(height: 6),
-            Text('Total donations: ₹$totalDonated'),
-            Text('Total transactions: ₹$totalTransactionsAmount'),
-            Text('Total bills: ₹$totalBillsAmount'),
-            Text('Net remaining: ₹$netRemaining'),
-          ],
-        ),
-      ),
+  Widget _summaryColumn(String label, String value, Color color) {
+    return Column(
+      children: [
+        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+        Text(value, style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.bold)),
+      ],
     );
   }
 
-  Widget _buildWorksCard() {
-    if (loadingWorks) {
-      return const Center(child: CircularProgressIndicator());
-    }
+  String _formatDate(dynamic timestamp) {
+    if (timestamp == null) return "N/A";
+    if (timestamp is Timestamp) return DateFormat('dd-MM-yyyy').format(timestamp.toDate());
+    return timestamp.toString();
+  }
 
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      color: const Color(0xFFFFF7E8),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+  void _showImageGallery(dynamic urls) {
+    final List list = urls is List ? urls : [];
+    if (list.isEmpty) return;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: backgroundCream,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => Container(
+        height: 300,
+        padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Works Done',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: darkMaroonText,
+            const Text("Attachments", style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            Expanded(
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: list.length,
+                itemBuilder: (context, i) => Padding(
+                  padding: const EdgeInsets.only(right: 10.0),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(list[i], width: 220, fit: BoxFit.cover),
+                  ),
+                ),
               ),
             ),
-            const SizedBox(height: 8),
-            if (works.isEmpty)
-              const Text(
-                'No works recorded.',
-                style: TextStyle(color: Colors.grey),
-              )
-            else
-              ...works.map((w) {
-                final images =
-                    (w['imageUrls'] as List? ?? []).cast<String>();
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFFB6862C)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        s(w['name']),
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      if (s(w['description']).isNotEmpty)
-                        Text(s(w['description'])),
-                      if (fmtDate(w['date']).isNotEmpty)
-                        Text('Date: ${fmtDate(w['date'])}'),
-                      Text('Amount spent: ₹${n(w['amountDonated'])}'),
-                      if (images.isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        SizedBox(
-                          height: 70,
-                          child: ListView(
-                            scrollDirection: Axis.horizontal,
-                            children: images
-                                .map(
-                                  (url) => Padding(
-                                    padding:
-                                        const EdgeInsets.only(right: 8),
-                                    child: GestureDetector(
-                                      onTap: () => _showFullImage(url),
-                                      child: ClipRRect(
-                                        borderRadius:
-                                            BorderRadius.circular(8),
-                                        child: Image.network(
-                                          url,
-                                          width: 70,
-                                          height: 70,
-                                          fit: BoxFit.cover,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                );
-              }).toList(),
           ],
-        ),
-      ),
-    );
-  }
-
-  void _showFullImage(String url) {
-    showDialog(
-      context: context,
-      barrierColor: Colors.black.withOpacity(0.85),
-      builder: (_) => GestureDetector(
-        onTap: () => Navigator.pop(context),
-        child: Center(
-          child: InteractiveViewer(
-            minScale: 0.8,
-            maxScale: 4,
-            child: Image.network(url),
-          ),
         ),
       ),
     );

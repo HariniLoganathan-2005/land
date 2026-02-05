@@ -29,20 +29,37 @@ class _PlaceTemplesScreenState extends State<PlaceTemplesScreen> {
   String districtName = '';
   List<Map<String, dynamic>> temples = [];
   int statusTab = 0;
+  
+  // Search State
+  TextEditingController searchController = TextEditingController();
+  String searchQuery = '';
 
-  List<Map<String, dynamic>> get pending =>
-      temples.where((t) => t['status'] == 'pending').toList();
-
-  List<Map<String, dynamic>> get ongoing =>
-      temples.where((t) => t['status'] == 'ongoing').toList();
-
-  List<Map<String, dynamic>> get completed =>
-      temples.where((t) => t['status'] == 'completed').toList();
-
+  // Filter Logic
   List<Map<String, dynamic>> get currentList {
-    if (statusTab == 0) return pending;
-    if (statusTab == 1) return ongoing;
-    return completed;
+    // 1. Filter by Status
+    List<Map<String, dynamic>> list;
+    if (statusTab == 0) {
+      list = temples.where((t) => t['status'] == 'pending').toList();
+    } else if (statusTab == 1) {
+      list = temples.where((t) => t['status'] == 'ongoing').toList();
+    } else {
+      list = temples.where((t) => t['status'] == 'completed').toList();
+    }
+
+    // 2. Filter by Search Query
+    if (searchQuery.trim().isEmpty) return list;
+
+    final query = searchQuery.toLowerCase().trim();
+    return list.where((t) {
+      // Added toString() to ensure we never check null
+      final projectId = (t['projectId'] ?? '').toString().toLowerCase();
+      final userName = (t['userName'] ?? '').toString().toLowerCase();
+      final userId = (t['userId'] ?? '').toString().toLowerCase();
+      
+      return projectId.contains(query) || 
+             userName.contains(query) || 
+             userId.contains(query);
+    }).toList();
   }
 
   @override
@@ -51,35 +68,61 @@ class _PlaceTemplesScreenState extends State<PlaceTemplesScreen> {
     _loadTemples();
   }
 
+  @override
+  void dispose() {
+    searchController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadTemples() async {
+    if (!mounted) return;
     setState(() => isLoading = true);
+    
     try {
       final snap = await FirebaseFirestore.instance
           .collection('projects')
           .where('taluk', isEqualTo: widget.placeId)
           .get();
 
+      if (!mounted) return;
+
       placeName = widget.placeId;
 
       if (snap.docs.isNotEmpty) {
-        districtName = (snap.docs.first.data()['district'] ?? '').toString();
+        // Safe access to district
+        final firstData = snap.docs.first.data();
+        districtName = (firstData['district'] ?? '').toString();
       }
 
+      // Fetch Users
       final Set<String> userIds = {};
       for (final doc in snap.docs) {
-        final uid = (doc.data()['userId'] ?? '').toString();
+        final data = doc.data();
+        final uid = (data['userId'] ?? '').toString();
         if (uid.isNotEmpty) userIds.add(uid);
       }
 
       final Map<String, Map<String, dynamic>> usersById = {};
       if (userIds.isNotEmpty) {
-        final userSnap = await FirebaseFirestore.instance
-            .collection('users')
-            .where(FieldPath.documentId, whereIn: userIds.toList())
-            .get();
+        // Firestore 'whereIn' supports max 10 items. 
+        // If you have > 10, this needs chunking. Assuming < 10 for now.
+        // Or simply fetching individually if list is small.
+        // Here we keep it simple but safe.
+        final List<String> idList = userIds.toList();
+        
+        // Chunking logic to prevent crash if > 10 users
+        for (var i = 0; i < idList.length; i += 10) {
+          final end = (i + 10 < idList.length) ? i + 10 : idList.length;
+          final chunk = idList.sublist(i, end);
+          
+          final userSnap = await FirebaseFirestore.instance
+              .collection('users')
+              .where(FieldPath.documentId, whereIn: chunk)
+              .get();
 
-        for (final u in userSnap.docs) {
-          usersById[u.id] = u.data();
+          for (final u in userSnap.docs) {
+            usersById[u.id] = u.data();
+          }
         }
       }
 
@@ -89,11 +132,16 @@ class _PlaceTemplesScreenState extends State<PlaceTemplesScreen> {
         final userData = usersById[uid] ?? {};
 
         final bool isSanctioned = data['isSanctioned'] == true;
-        final int progress = ((data['progress'] ?? 0) as num).toInt();
+        
+        // FIX: Safer number parsing (handles String "50" vs Number 50)
+        int progress = 0;
+        if (data['progress'] != null) {
+          progress = int.tryParse(data['progress'].toString()) ?? 0;
+        }
+
         final String rawStatus = (data['status'] ?? 'pending').toString().toLowerCase();
 
         String status;
-        // CRITICAL: Check if status is explicitly 'rejected' first
         if (rawStatus == 'rejected') {
           status = 'rejected';
         } else if (!isSanctioned) {
@@ -106,32 +154,26 @@ class _PlaceTemplesScreenState extends State<PlaceTemplesScreen> {
 
         return <String, dynamic>{
           'id': doc.id,
-          'district': data['district'] ?? '',
-          'taluk': data['taluk'] ?? '',
-          'place': data['place'] ?? '',
-          'feature': data['feature'] ?? '',
-          'featureType': data['featureType'] ?? '',
-          'featureDimension': data['featureDimension'] ?? '',
-          'featureAmount': double.tryParse((data['featureAmount'] ?? '0').toString()) ?? 0.0,
-          'name': (data['feature'] != null && data['feature'] != '')
-              ? '${data['feature']} Project'
-              : 'Temple Project',
+          // FIX: Ensure Fallback values are present
+          'projectId': (data['projectId'] ?? 'No ID').toString(), 
+          'userId': uid,
+          'district': (data['district'] ?? '').toString(),
+          'taluk': (data['taluk'] ?? '').toString(),
+          'place': (data['place'] ?? '').toString(),
+          'feature': (data['feature'] ?? '').toString(),
           'status': status,
           'progress': progress,
           'isSanctioned': isSanctioned,
-          'userName': userData['name'] ?? data['contactName'] ?? '',
-          'userEmail': userData['email'] ?? '',
-          'userPhone': userData['phoneNumber'] ?? data['contactPhone'] ?? '',
-          'estimatedAmount': double.tryParse((data['estimatedAmount'] ?? '0').toString()) ?? 0.0,
+          // Fallback logic for name
+          'userName': (userData['name'] ?? data['contactName'] ?? 'Unknown User').toString(),
+          'userEmail': (userData['email'] ?? '').toString(),
+          'userPhone': (userData['phoneNumber'] ?? data['contactPhone'] ?? '').toString(),
+          // Safe List casting
           'imageUrls': List<String>.from(data['imageUrls'] ?? []),
-          'submittedDate': (data['dateCreated'] != null && data['dateCreated'] is Timestamp)
-              ? (data['dateCreated'] as Timestamp).toDate().toIso8601String().substring(0, 10)
-              : '',
           'raw': data,
         };
       }).toList();
 
-      // CRITICAL: Filter out rejected projects from the list
       temples.removeWhere((t) => t['status'] == 'rejected');
       
     } catch (e) {
@@ -144,11 +186,16 @@ class _PlaceTemplesScreenState extends State<PlaceTemplesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Calculate counts safely
+    final pendingCount = temples.where((t) => t['status'] == 'pending').length;
+    final ongoingCount = temples.where((t) => t['status'] == 'ongoing').length;
+    final completedCount = temples.where((t) => t['status'] == 'completed').length;
+
     return Scaffold(
       backgroundColor: backgroundCream,
       body: Column(
         children: [
-          // Header with Temple Maroon Gradient
+          // Header with Search
           Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
@@ -161,29 +208,74 @@ class _PlaceTemplesScreenState extends State<PlaceTemplesScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back, color: lightGoldText),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                    Text(
-                      placeName,
-                      style: const TextStyle(
-                        color: lightGoldText,
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      districtName.isEmpty ? 'Temple Projects' : '$districtName District',
-                      style: const TextStyle(color: primaryAccentGold, fontSize: 14),
-                    ),
-                    const SizedBox(height: 16),
+                    // Top Row
                     Row(
                       children: [
-                        _buildStatusTab('Pending (${pending.length})', 0),
-                        _buildStatusTab('Ongoing (${ongoing.length})', 1),
-                        _buildStatusTab('Completed (${completed.length})', 2),
+                        IconButton(
+                          icon: const Icon(Icons.arrow_back, color: lightGoldText),
+                          onPressed: () => Navigator.pop(context),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                placeName.isEmpty ? 'Loading...' : placeName,
+                                style: const TextStyle(
+                                  color: lightGoldText,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Text(
+                                districtName.isEmpty ? 'Temple Projects' : '$districtName District',
+                                style: const TextStyle(color: primaryAccentGold, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Search Bar
+                    TextField(
+                      controller: searchController,
+                      onChanged: (val) => setState(() => searchQuery = val),
+                      style: const TextStyle(color: darkMaroonText),
+                      decoration: InputDecoration(
+                        hintText: 'Search Project ID or User ID...',
+                        hintStyle: TextStyle(color: darkMaroonText.withOpacity(0.5)),
+                        prefixIcon: const Icon(Icons.search, color: primaryMaroon),
+                        suffixIcon: searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, color: primaryMaroon),
+                                onPressed: () {
+                                  searchController.clear();
+                                  setState(() => searchQuery = '');
+                                },
+                              )
+                            : null,
+                        filled: true,
+                        fillColor: softParchment,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(30),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Status Tabs
+                    Row(
+                      children: [
+                        _buildStatusTab('Pending ($pendingCount)', 0),
+                        _buildStatusTab('Ongoing ($ongoingCount)', 1),
+                        _buildStatusTab('Done ($completedCount)', 2),
                       ],
                     ),
                   ],
@@ -191,14 +283,25 @@ class _PlaceTemplesScreenState extends State<PlaceTemplesScreen> {
               ),
             ),
           ),
+
+          // List Body
           Expanded(
             child: isLoading
                 ? const Center(child: CircularProgressIndicator(color: primaryMaroon))
                 : currentList.isEmpty
-                    ? const Center(
-                        child: Text(
-                          'No projects found',
-                          style: TextStyle(fontSize: 16, color: darkMaroonText),
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.search_off, size: 48, color: darkMaroonText.withOpacity(0.3)),
+                            const SizedBox(height: 8),
+                            Text(
+                              searchQuery.isNotEmpty 
+                                  ? 'No matching projects found' 
+                                  : 'No projects in this category',
+                              style: const TextStyle(fontSize: 16, color: darkMaroonText),
+                            ),
+                          ],
                         ),
                       )
                     : ListView.builder(
@@ -245,6 +348,10 @@ class _PlaceTemplesScreenState extends State<PlaceTemplesScreen> {
   }
 
   Widget _buildTempleCard(Map<String, dynamic> temple) {
+    // Extra safety: Ensure map keys exist before accessing, though _loadTemples handles this now.
+    final projectId = temple['projectId'] ?? 'No ID';
+    final userName = temple['userName'] ?? 'Unknown User';
+
     return Card(
       elevation: 0,
       color: Colors.white,
@@ -256,12 +363,28 @@ class _PlaceTemplesScreenState extends State<PlaceTemplesScreen> {
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         title: Text(
-          temple['name'],
-          style: const TextStyle(fontWeight: FontWeight.bold, color: darkMaroonText),
+          projectId, // Displaying Project ID
+          style: const TextStyle(
+            fontWeight: FontWeight.bold, 
+            color: darkMaroonText,
+            fontSize: 16,
+          ),
         ),
-        subtitle: Text(
-          temple['userName'],
-          style: TextStyle(color: darkMaroonText.withOpacity(0.7)),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4.0),
+          child: Row(
+            children: [
+              const Icon(Icons.person, size: 14, color: secondaryGold),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  userName, // Displaying User Name
+                  style: TextStyle(color: darkMaroonText.withOpacity(0.7)),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
         ),
         trailing: const Icon(Icons.chevron_right, color: primaryMaroon),
         onTap: () async {
@@ -275,25 +398,19 @@ class _PlaceTemplesScreenState extends State<PlaceTemplesScreen> {
             ),
           );
 
-          // Handle the result from TempleDetailScreen
           if (result == 'deleted' || result == 'removed') {
-            // IMMEDIATELY remove from the list
             setState(() {
               temples.removeWhere((t) => t['id'] == temple['id']);
             });
-            
-            // Show a confirmation message
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Project removed successfully'),
                   backgroundColor: Colors.green,
-                  duration: Duration(seconds: 2),
                 ),
               );
             }
           } else if (result is Map<String, dynamic>) {
-            // Update the temple data if it was modified
             final idx = temples.indexWhere((t) => t['id'] == result['id']);
             if (idx != -1) {
               setState(() {

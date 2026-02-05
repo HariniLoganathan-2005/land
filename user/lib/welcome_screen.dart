@@ -10,6 +10,7 @@ import 'splash_screen.dart';
 import '../screens/project_overview_screen.dart';
 import '../screens/user_completed_project_screen.dart';
 import '../screens/all_completed_works_screen.dart';
+import '../rejected_proposals_screen.dart';
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
@@ -228,7 +229,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Aranpani',
+                Text('ShivPunarva',
                     style: GoogleFonts.cinzelDecorative(
                         fontSize: 20, fontWeight: FontWeight.bold, color: const Color(0xFF5D4037))),
                 Text('Welcome', style: GoogleFonts.poppins(color: const Color(0xFF8D6E63), fontSize: 12)),
@@ -429,7 +430,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    status == 'rejected' ? 'Plan Rejected - Click to see why' : 'Click to view details',
+                    status == 'rejected' ? 'Plan Rejected' : '',
                     style: GoogleFonts.poppins(fontSize: 12, color: statusColor),
                   ),
                 ),
@@ -487,14 +488,16 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           ),
           // NEW SECTION: Rejected History
           ListTile(
-            leading: const Icon(Icons.report_gmailerrorred_rounded, color: Colors.red),
-            title: const Text('Rejected Proposals'),
-            onTap: () {
-              Navigator.pop(context);
-              // Navigate to a screen filtered by status: 'archived_rejected'
-              // For brevity, assuming you might create a generic history screen
-            },
-          ),
+  leading: const Icon(Icons.report_gmailerrorred_rounded, color: Colors.red),
+  title: const Text('Rejected Proposals'),
+  onTap: () {
+    Navigator.pop(context);
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const RejectedProposalsScreen()),
+    );
+  },
+),
           const Divider(),
           ListTile(
             leading: const Icon(Icons.logout),
